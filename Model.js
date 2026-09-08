@@ -160,9 +160,7 @@ function packFiles(sounds) {
 
 // Whether two file lists hold the same names in the same order. The pool is
 // an Instantiator over the list, so handing it a fresh array with identical
-// contents destroys and rebuilds every SoundEffect for nothing — and every
-// rebuild is another chance to race Qt's shared audio engine, which is where
-// a crash on device change came from.
+// contents destroys and reloads every SoundEffect for nothing.
 function sameList(a, b) {
   if (!a || !b || a.length !== b.length) return false
   for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false

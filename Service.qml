@@ -33,9 +33,11 @@ Item {
   property var packs: []
   property var sounds: ({})
 
-  // The SoundEffect pool's model. Assigned only when the names actually
-  // change (Model.sameList), because rebuilding the pool tears down every
-  // effect and Qt's audio engine is shared and refcounted across them.
+  // The SoundEffect pool's model. packConfig re-reads on every watcher event,
+  // and a fresh array of identical names would make Instantiator throw away a
+  // dozen loaded WAVs and decode them again, so the assignment is skipped
+  // when the names match (Model.sameList). Packs that share file names, which
+  // all the bundled ones do, then switch by re-pointing source instead.
   property var files: []
 
   // Services are not handed their inline settings, so this is the plugin's
@@ -225,19 +227,6 @@ Item {
     onExited: if (root.hookDirty) { root.hookDirty = false; root.syncHook() }
   }
 
-  // Qt shares one refcounted audio engine per output device across every
-  // SoundEffect in the process, and quickshell 0.3.1 on Qt 6.11.2 has been
-  // seen to fault on the PipeWire realtime thread when that engine is
-  // destroyed underneath an in-flight callback. This silent effect never
-  // plays; it exists so a pack switch or a pool rebuild can never take the
-  // last reference. It does not defend against the device itself going away,
-  // which is Qt's to fix (QRtAudioEngine::audioCallback).
-  SoundEffect {
-    id: enginePin
-    source: root.pack && root.files.length > 0 ? Util.fileUrl(root.pack.dir + "/" + root.files[0]) : ""
-    volume: 0
-  }
-
   // One preloaded SoundEffect per WAV of the current pack (a few dozen, well
   // under a megabyte): playing a key is then an index lookup, no file I/O on
   // the keystroke path.
@@ -250,9 +239,6 @@ Item {
 
       source: root.pack ? Util.fileUrl(root.pack.dir + "/" + modelData) : ""
       volume: root.volume / 100
-
-      // Leaves no voice in the engine's registry as the object goes away.
-      Component.onDestruction: stop()
     }
   }
 
