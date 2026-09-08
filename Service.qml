@@ -155,10 +155,17 @@ Item {
     syncHook()
   }
 
+  // Set on the way in, cleared only by the timer on the way out. Assigning it
+  // here on unlock would be too late: hookWanted binds to `locked` too, and
+  // nothing orders that binding's re-evaluation after this handler, so the
+  // hook could re-arm for an instant in exactly the window being avoided.
   onLockedChanged: {
-    unlockSettling = !locked
-    if (locked) unlockSettle.stop()
-    else unlockSettle.restart()
+    if (locked) {
+      unlockSettling = true
+      unlockSettle.stop()
+    } else {
+      unlockSettle.restart()
+    }
   }
 
   // Unload (disable, remove, hot reload) must take the hook with it, and the
