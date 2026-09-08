@@ -1,14 +1,14 @@
 # OmaThock
 
 Every key you press makes a mechanical keyboard sound. Ten switch recordings are
-bundled — Holy Panda, Alpaca, Ink Black, Box Navy, buckling spring — and the bar
-button gives you a toggle, the soundpack picker and a volume slider.
+bundled, including Holy Panda, Alpaca, Ink Black, Box Navy and buckling spring,
+and the bar button gives you a toggle, the soundpack picker and a volume slider.
 
 It is [thock](https://github.com/kamillobinski/thock) for Omarchy, and it plays
 thock's soundpacks unchanged. The other keyboard-sound plugins on Linux read
 `/dev/input`, which means adding yourself to the `input` group and running a
-daemon or a compiled binary next to the shell. This one needs **no group, no
-daemon and no binary**: Hyprland already sees every key and its Lua state is
+daemon or a compiled binary next to the shell. This one needs no group, no
+daemon and no binary. Hyprland already sees every key and its Lua state is
 scriptable over IPC, so the plugin asks the compositor to re-broadcast keycodes
 and plays the WAVs inside the shell process you are already running.
 
@@ -20,8 +20,8 @@ and plays the WAVs inside the shell process you are already running.
 omarchy plugin add https://github.com/TerrifiedBug/omathock.git --enable
 ```
 
-That is the whole install. No restart, no group membership, nothing to compile,
-no files outside `~/.config/omarchy`.
+That is the whole install: no restart, no group membership, nothing to compile,
+and no files outside `~/.config/omarchy`.
 
 Requires Hyprland's Lua config (`~/.config/hypr/hyprland.lua`, the Omarchy 4
 default). On a legacy `hyprland.conf` there is no key event to hook and the
@@ -29,8 +29,8 @@ panel says so.
 
 ## Using it
 
-**Left-click** the keyboard icon in the bar for the panel. **Right-click** it to
-mute and unmute — the icon dims when sounds are off.
+Left-click the thock mark in the bar for the panel. Right-click it to mute and
+unmute; the icon dims when sounds are off.
 
 | Control    | Does                                                      |
 | ---------- | --------------------------------------------------------- |
@@ -72,8 +72,8 @@ Bundled, all recorded by [tplai](https://github.com/tplai/kbsim) and packaged by
 `gateron-ink-red` · `gateron-turquoise-tealios` · `kailh-box-navy` ·
 `novelkeys-cream` · `topre` · `IBM-buckling-spring`
 
-Add your own from thock's collection, or any pack in the same format — a flat
-folder with a `config.json` and its WAVs:
+Add your own from thock's collection, or any pack in the same format, which is a
+flat folder holding a `config.json` and its WAVs:
 
 ```bash
 mkdir -p ~/.local/share/omathock/soundpacks/cherry-mx-brown
@@ -81,10 +81,10 @@ curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/ke
   | bsdtar -xf - -C ~/.local/share/omathock/soundpacks/cherry-mx-brown
 ```
 
-Reopen the panel and it is in the list. The **directory name is the pack's
-name** — `cherry-mx-brown` shows up as "Cherry Mx Brown" — and a user pack with
-the same name as a bundled one replaces it. Packs must be WAV; `SoundEffect`
-does not decode OGG. Mouse packs are not supported: Hyprland's Lua bus has no
+Reopen the panel and it is in the list. The directory name is the pack's name,
+so `cherry-mx-brown` shows up as "Cherry Mx Brown", and a user pack with the same
+name as a bundled one replaces it. Packs must be WAV, because `SoundEffect` does
+not decode OGG. Mouse packs are not supported: Hyprland's Lua bus has no
 mouse-button event.
 
 ## IPC
@@ -112,16 +112,16 @@ absolute minimum: it re-emits the keycode as a `custom>>omathock,<code>,<state>`
 line on Hyprland's socket2. Quickshell is already listening to socket2, so the
 key arrives inside the shell, gets translated from evdev code to a thock key
 name, and plays one of the pack's takes for that key from a preloaded
-`SoundEffect` — no file I/O, no process, no round trip on the keystroke path.
-Packs with key-up recordings click on release too.
+`SoundEffect`. The keystroke path itself does no file I/O, spawns no process and
+makes no round trip. Packs with key-up recordings click on release too.
 
-Holding a key is one sound, not a stream. That takes some care, because a held
-key looks different on every setup: nothing at all until release on a plain
-keyboard, a flood of releases from `wtype`, press/release pairs at the repeat
-rate when an input method re-emits what it grabbed — and with fcitx5 running,
-every event arrives twice. So a press only clicks when the key is not already
-down, and a release waits 35 ms before it counts; another press inside that
-window is a repeat, and the key was never really up.
+Holding a key gives one sound. That takes some care, because a held key looks
+different on every setup: nothing at all until release on a plain keyboard, a
+flood of releases from `wtype`, or press/release pairs at the repeat rate when an
+input method re-emits what it grabbed. With fcitx5 running, every event arrives
+twice on top of that. So a press only clicks when the key is not already down,
+and a release waits 35 ms before it counts; another press inside that window is a
+repeat, and the key was never really up.
 
 Runtime Lua state does not survive `hyprctl reload`, so the plugin re-registers
 on `configreloaded`. Turning the toggle off, disabling the plugin, removing it
@@ -130,9 +130,9 @@ or hot-reloading it all remove the subscription from Hyprland.
 ## Privacy
 
 While sounds are on, keycodes travel on Hyprland's socket2, which is readable by
-processes running as you. This grants nobody a new capability — any program you
-run could already install the same Lua hook, or read `/dev/input` if you are in
-the `input` group — but it is worth knowing that the codes are on that bus. No
+processes running as you. That grants nobody a new capability, since any program
+you run could already install the same Lua hook, or read `/dev/input` if you are
+in the `input` group, but it is worth knowing the codes are on that bus. No
 modifiers, no window titles and no text are broadcast, nothing is written to
 disk, and turning the toggle off removes the hook entirely.
 
@@ -157,5 +157,5 @@ Qt-free: `node --test test/`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed
-recordings by Thomas Lai; see [NOTICE](NOTICE).
+MIT, see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed recordings
+by Thomas Lai; see [NOTICE](NOTICE).
