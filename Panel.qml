@@ -33,6 +33,11 @@ Panel {
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // A direct-panel bar widget is sized by its own content: without this the
+  // bar hands it zero width and the button never appears.
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
+
   // Packs dropped into ~/.local/share/omathock/soundpacks show up on open,
   // without a restart.
   onOpenedChanged: if (opened && service) service.refreshPacks()
