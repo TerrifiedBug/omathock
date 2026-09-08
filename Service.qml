@@ -33,6 +33,11 @@ Item {
   property var packs: []
   property var sounds: ({})
 
+  // The SoundEffect pool's model. Assigned only when the names actually
+  // change (Model.sameList), because rebuilding the pool tears down every
+  // effect and Qt's audio engine is shared and refcounted across them.
+  property var files: []
+
   // Services are not handed their inline settings, so this is the plugin's
   // own entry read out of shell.json. It is applied locally on a write as
   // well: the shell replaces shell.json atomically, and the rename moves the
@@ -64,19 +69,33 @@ Item {
     return packs.length > 0 ? packs[0] : null
   }
   readonly property string packSlug: pack ? pack.slug : ""
-  readonly property var files: Model.packFiles(sounds)
+
+  // Sounds while the session is locked would put the password's keycodes on
+  // Hyprland's socket2 and fire a burst of play() calls straight through the
+  // audio-graph rebuild that follows a resume. Both are worth avoiding, so
+  // the hook comes off entirely for the duration.
+  readonly property var lockService: shell && typeof shell.firstPartyServiceFor === "function" ? shell.firstPartyServiceFor("omarchy.lock") : null
+  readonly property bool locked: lockService ? lockService.locked === true : false
 
   // hl.on only exists when Hyprland runs the Lua config. usingLua starts false
   // and flips when the version query answers a beat after construction, so a
   // false here is not yet a verdict — the Connections below retry on change.
   readonly property bool luaReady: Hyprland.usingLua === true
-  readonly property bool hookWanted: soundEnabled && luaReady
+  readonly property bool hookWanted: soundEnabled && luaReady && !locked
 
   function play(name, up) {
+    if (locked) return
     var file = Model.soundFor(sounds, name, up, Math.random())
     if (!file) return
     var effect = pool.objectAt(files.indexOf(file))
     if (effect) effect.play()
+  }
+
+  // Called after every soundpack read: a watcher firing on an unchanged file
+  // must not churn the pool.
+  function refreshFiles() {
+    var next = Model.packFiles(sounds)
+    if (!Model.sameList(files, next)) files = next
   }
 
   // Rebuild the whole inline entry, the way first-party panels do, and let the
@@ -131,12 +150,14 @@ Item {
   // component is already going away, so this cannot be a tracked Process.
   Component.onDestruction: if (luaReady) Quickshell.execDetached(["hyprctl", "repl", Model.LUA_UNREGISTER])
 
+  // watchChanges reports the change; the re-read is the handler's job.
   FileView {
     id: shellConfig
     path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
     watchChanges: true
     printErrors: false
 
+    onFileChanged: reload()
     onLoaded: root.settings = Model.findEntry(text(), root.manifestId)
   }
 
@@ -147,6 +168,8 @@ Item {
     watchChanges: true
     printErrors: false
 
+    onFileChanged: reload()
+
     onLoaded: {
       try {
         root.sounds = JSON.parse(text()).sounds || ({})
@@ -154,9 +177,10 @@ Item {
         root.sounds = ({})
         console.warn("omathock: unreadable soundpack config:", path)
       }
+      root.refreshFiles()
     }
 
-    onPathChanged: if (path === "") root.sounds = ({})
+    onPathChanged: if (path === "") { root.sounds = ({}); root.refreshFiles() }
   }
 
   // A missing user root makes find exit 1 after listing the bundled root;
@@ -188,6 +212,19 @@ Item {
     onExited: if (root.hookDirty) { root.hookDirty = false; root.syncHook() }
   }
 
+  // Qt shares one refcounted audio engine per output device across every
+  // SoundEffect in the process, and quickshell 0.3.1 on Qt 6.11.2 has been
+  // seen to fault on the PipeWire realtime thread when that engine is
+  // destroyed underneath an in-flight callback. This silent effect never
+  // plays; it exists so a pack switch or a pool rebuild can never take the
+  // last reference. It does not defend against the device itself going away,
+  // which is Qt's to fix (QRtAudioEngine::audioCallback).
+  SoundEffect {
+    id: enginePin
+    source: root.pack && root.files.length > 0 ? Util.fileUrl(root.pack.dir + "/" + root.files[0]) : ""
+    volume: 0
+  }
+
   // One preloaded SoundEffect per WAV of the current pack (a few dozen, well
   // under a megabyte): playing a key is then an index lookup, no file I/O on
   // the keystroke path.
@@ -200,6 +237,9 @@ Item {
 
       source: root.pack ? Util.fileUrl(root.pack.dir + "/" + modelData) : ""
       volume: root.volume / 100
+
+      // Leaves no voice in the engine's registry as the object goes away.
+      Component.onDestruction: stop()
     }
   }
 
@@ -267,6 +307,7 @@ Item {
         volume: root.volume,
         hooked: root.hooked,
         lua: root.luaReady,
+        locked: root.locked,
         packs: root.packs.map(function(p) { return p.slug })
       })
     }

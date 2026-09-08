@@ -158,6 +158,17 @@ function packFiles(sounds) {
   return out.sort()
 }
 
+// Whether two file lists hold the same names in the same order. The pool is
+// an Instantiator over the list, so handing it a fresh array with identical
+// contents destroys and rebuilds every SoundEffect for nothing — and every
+// rebuild is another chance to race Qt's shared audio engine, which is where
+// a crash on device change came from.
+function sameList(a, b) {
+  if (!a || !b || a.length !== b.length) return false
+  for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
 // Directory name is the pack's identity, so it is also its label:
 // "gateron-ink-black" -> "Gateron Ink Black", "IBM-buckling-spring" -> "IBM
 // Buckling Spring" (only the first character is touched, acronyms survive).
@@ -236,6 +247,7 @@ if (typeof module !== "undefined") {
     hasPending: hasPending,
     soundFor: soundFor,
     packFiles: packFiles,
+    sameList: sameList,
     packLabel: packLabel,
     parsePacks: parsePacks,
     dirFromUrl: dirFromUrl,

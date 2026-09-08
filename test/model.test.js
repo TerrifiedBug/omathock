@@ -72,6 +72,14 @@ test("a held key flooding releases stays one press", () => {
   assert.deepEqual(Model.dueReleases(state, 1100), ["a"])
 })
 
+test("sameList tells an unchanged pack from a real switch", () => {
+  assert.equal(Model.sameList(["1.wav", "2.wav"], ["1.wav", "2.wav"]), true)
+  assert.equal(Model.sameList(["1.wav"], ["1.wav", "2.wav"]), false)
+  assert.equal(Model.sameList(["1.wav", "2.wav"], ["2.wav", "1.wav"]), false)
+  assert.equal(Model.sameList([], []), true)
+  assert.equal(Model.sameList(null, []), false)
+})
+
 test("deliberate re-presses and other keys stay audible", () => {
   const state = Model.keyState()
   Model.pressKey(state, 38)
