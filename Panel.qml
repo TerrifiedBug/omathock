@@ -50,7 +50,17 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "󰌌" // nf-md-keyboard
+    // The thock mark rather than a keyboard glyph: this is a port of thock,
+    // and the mark reads at bar size where a keyboard does not.
+    iconComponent: Component {
+      Item {
+        ThockIcon {
+          anchors.centerIn: parent
+          iconSize: Style.space(12)
+          color: root.barForeground
+        }
+      }
+    }
     // No `active`: that paints the icon in the bar's urgent colour, and
     // sounds being on is the resting state, not an alarm. Muted just dims.
     dimmed: !root.soundEnabled
