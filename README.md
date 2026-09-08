@@ -139,8 +139,14 @@ or hot-reloading it all remove the subscription from Hyprland.
 
 ## On the lock screen
 
-A locked session is silent, and the Lua hook is removed for as long as it
-lasts, so the keys of your password never reach Hyprland's socket2 either.
+A locked session is silent, and the Lua hook is removed for as long as the
+lock lasts, so the keys of your password do not reach Hyprland's socket2
+either. The lock is detected by polling `omarchy-hyprland-session-locked`, the
+helper omarchy's own lock service uses, once a second: omarchy 4.0.3 keeps the
+lock service out of the map plugins can read, so there is no signal to
+subscribe to. That leaves up to about a second between the lock appearing and
+the hook coming off, which is a real gap if you start typing your password
+instantly.
 
 Sounds come back about four seconds after you unlock. That pause is
 deliberate. A resume rebuilds the audio graph underneath the shell, and Qt
