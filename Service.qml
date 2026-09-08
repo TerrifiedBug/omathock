@@ -62,6 +62,12 @@ Item {
   // consumer in the shell, which is not this plugin's to do.
   property bool locked: false
 
+  // False until the helper has actually answered. Anything that leaves the
+  // state unknown, the first poll after startup, an undetermined answer, or
+  // sounds being switched on again after the poller was stopped, has to hold
+  // the hook off: an unknown lock state may be a locked one.
+  property bool lockKnown: false
+
   // Unlocking is the dangerous moment, not the lock itself: the resume that
   // preceded it rebuilds the audio graph, and the crash this guards against
   // landed 1.3 s after a successful unlock, with WirePlumber still relinking
@@ -97,10 +103,10 @@ Item {
   // and flips when the version query answers a beat after construction, so a
   // false here is not yet a verdict — the Connections below retry on change.
   readonly property bool luaReady: Hyprland.usingLua === true
-  readonly property bool hookWanted: soundEnabled && luaReady && !locked && !unlockSettling
+  readonly property bool hookWanted: soundEnabled && luaReady && lockKnown && !locked && !unlockSettling
 
   function play(name, up) {
-    if (locked || unlockSettling) return
+    if (!lockKnown || locked || unlockSettling) return
     var file = Model.soundFor(sounds, name, up, Math.random())
     if (!file) return
     var effect = pool.objectAt(files.indexOf(file))
@@ -161,6 +167,10 @@ Item {
     releasePending = false
     syncHook()
   }
+
+  // The poller only runs while sounds are on, so whatever it last saw is
+  // stale by the time they come back: the session may have locked meanwhile.
+  onSoundEnabledChanged: if (soundEnabled) lockKnown = false
 
   // Set on the way in, cleared only by the timer on the way out. Assigning it
   // here on unlock would be too late: hookWanted binds to `locked` too, and
@@ -302,6 +312,9 @@ Item {
     command: ["omarchy-hyprland-session-locked"]
 
     onExited: function(exitCode) {
+      // 0 locked, 1 unlocked, anything else undetermined, which drops back to
+      // not knowing rather than standing on a stale answer.
+      root.lockKnown = exitCode === 0 || exitCode === 1
       if (exitCode === 0) root.locked = true
       else if (exitCode === 1) root.locked = false
     }
