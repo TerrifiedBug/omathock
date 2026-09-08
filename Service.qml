@@ -313,10 +313,15 @@ Item {
 
     onExited: function(exitCode) {
       // 0 locked, 1 unlocked, anything else undetermined, which drops back to
-      // not knowing rather than standing on a stale answer.
-      root.lockKnown = exitCode === 0 || exitCode === 1
-      if (exitCode === 0) root.locked = true
-      else if (exitCode === 1) root.locked = false
+      // not knowing rather than standing on a stale answer. `locked` is
+      // assigned before `lockKnown`: the other order lets hookWanted see a
+      // known-and-unlocked state for an instant while the answer was locked.
+      if (exitCode !== 0 && exitCode !== 1) {
+        root.lockKnown = false
+        return
+      }
+      root.locked = exitCode === 0
+      root.lockKnown = true
     }
   }
 
