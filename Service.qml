@@ -33,6 +33,11 @@ Item {
   property var packs: []
   property var sounds: ({})
 
+  // Which keys are held and which releases are still waiting to count; the
+  // rules live in Model.pressKey / releaseKey / dueReleases.
+  property var keys: Model.keyState()
+  property bool releasePending: false
+
   readonly property string manifestId: manifest && manifest.id ? manifest.id : "io.github.terrifiedbug.omathock"
 
   readonly property string pluginDir: Model.dirFromUrl(Qt.resolvedUrl("."))
@@ -109,7 +114,13 @@ Item {
     syncHook()
   }
 
-  onHookWantedChanged: syncHook()
+  // A key held while the hook goes away never sends its release, so the state
+  // is dropped rather than left holding that key down forever.
+  onHookWantedChanged: {
+    keys = Model.keyState()
+    releasePending = false
+    syncHook()
+  }
 
   // Unload (disable, remove, hot reload) must take the hook with it, and the
   // component is already going away, so this cannot be a tracked Process.
@@ -200,7 +211,27 @@ Item {
       }
       if (event.name !== "custom" || !root.soundEnabled) return
       var key = Model.parseEvent(event.data)
-      if (key) root.play(key.name, key.up)
+      if (!key) return
+      if (key.up) {
+        if (Model.releaseKey(root.keys, key.code, key.name, Date.now())) root.releasePending = true
+      } else if (Model.pressKey(root.keys, key.code)) {
+        root.play(key.name, false)
+      }
+    }
+  }
+
+  // Runs only while a release is waiting out the repeat window, and stops as
+  // soon as the last one has played.
+  Timer {
+    id: releaseFlush
+    interval: 15
+    repeat: true
+    running: root.releasePending
+
+    onTriggered: {
+      var due = Model.dueReleases(root.keys, Date.now())
+      for (var i = 0; i < due.length; i++) root.play(due[i], true)
+      root.releasePending = Model.hasPending(root.keys)
     }
   }
 

@@ -14,7 +14,7 @@ var EVENT_TAG = "omathock"
 // Registration is remove-then-add so a re-run is idempotent without a guard
 // global: a subscription orphaned by `hyprctl reload` may refuse :remove(),
 // hence the pcall. The callback runs on the compositor thread with a 50 ms
-// budget, so it only dispatches an event — never exec, never I/O.
+// budget, so it only re-emits the event — never exec, never I/O.
 var LUA_REGISTER = "if _G.__omathock then pcall(function() _G.__omathock:remove() end) end _G.__omathock = hl.on(\"input.keyboard.key\", function(code, _, state) hl.dispatch(hl.dsp.event(\"" + EVENT_TAG + ",\" .. code .. \",\" .. state)) end) return \"ok\""
 
 var LUA_UNREGISTER = "if _G.__omathock then pcall(function() _G.__omathock:remove() end) _G.__omathock = nil end return \"ok\""
@@ -51,13 +51,71 @@ function keyName(xkbCode) {
   return KEY_NAMES[Number(xkbCode) - 8] || "default"
 }
 
-// "omathock,<code>,<state>" -> { name, up }. Anything else is another
+// "omathock,<code>,<state>" -> { code, name, up }. Anything else is another
 // plugin's custom event and must be ignored, not guessed at.
 function parseEvent(data) {
   var parts = String(data === undefined || data === null ? "" : data).split(",")
   if (parts.length !== 3 || parts[0] !== EVENT_TAG) return null
   if (!/^\d+$/.test(parts[1]) || (parts[2] !== "0" && parts[2] !== "1")) return null
-  return { name: keyName(parts[1]), up: parts[2] === "0" }
+  return { code: Number(parts[1]), name: keyName(parts[1]), up: parts[2] === "0" }
+}
+
+// How long a release waits before it counts as a release. Key repeat runs at
+// input:repeat_rate (40/s on Omarchy, so 25 ms), so a gap this size cannot
+// occur inside a repeat stream, while a person lifting a finger and pressing
+// the same key again takes far longer.
+var UP_DEBOUNCE_MS = 35
+
+function keyState() {
+  return { down: {}, pending: {} }
+}
+
+// A held key is not one event stream but three, depending on the keyboard:
+// nothing at all until release (a plain physical keyboard), a flood of
+// releases (wtype), or press/release pairs at the repeat rate (an input
+// method re-emitting what it grabbed). On top of that fcitx5 delivers every
+// event twice with an identical timestamp. All three have to sound like one
+// key press, which is what these three functions are for: a press while the
+// key is logically down is silent, and a release only counts once it has gone
+// UP_DEBOUNCE_MS without another press — a repeat's next press cancels it, so
+// a held key stays one press until the finger really lifts.
+
+// True when the press should click.
+function pressKey(state, code) {
+  if (state.pending[code] !== undefined) {
+    // Mid-repeat: the release that never happened, un-released.
+    delete state.pending[code]
+    state.down[code] = true
+    return false
+  }
+  if (state.down[code]) return false
+  state.down[code] = true
+  return true
+}
+
+// True when the caller should start waiting to play the key-up sound.
+function releaseKey(state, code, name, now) {
+  if (!state.down[code]) return false
+  delete state.down[code]
+  state.pending[code] = { name: name, at: now }
+  return true
+}
+
+// Key names whose release has now stood long enough to be real.
+function dueReleases(state, now) {
+  var out = []
+  var codes = Object.keys(state.pending)
+  for (var i = 0; i < codes.length; i++) {
+    var entry = state.pending[codes[i]]
+    if (now - entry.at < UP_DEBOUNCE_MS) continue
+    out.push(entry.name)
+    delete state.pending[codes[i]]
+  }
+  return out
+}
+
+function hasPending(state) {
+  return Object.keys(state.pending).length > 0
 }
 
 // Pick one WAV for a key press/release. `r` is a caller-supplied [0,1) so the
@@ -171,6 +229,11 @@ if (typeof module !== "undefined") {
     KEY_ALIASES: KEY_ALIASES,
     keyName: keyName,
     parseEvent: parseEvent,
+    keyState: keyState,
+    pressKey: pressKey,
+    releaseKey: releaseKey,
+    dueReleases: dueReleases,
+    hasPending: hasPending,
     soundFor: soundFor,
     packFiles: packFiles,
     packLabel: packLabel,

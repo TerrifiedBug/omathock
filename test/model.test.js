@@ -23,12 +23,62 @@ test("keyName translates xkb codes into thock key names", () => {
 })
 
 test("parseEvent accepts this plugin's events and rejects everything else", () => {
-  assert.deepEqual(Model.parseEvent("omathock,38,1"), { name: "a", up: false })
+  assert.deepEqual(Model.parseEvent("omathock,38,1"), { code: 38, name: "a", up: false })
   assert.equal(Model.parseEvent("omathock,38,0").up, true)
   assert.equal(Model.parseEvent("other,1,1"), null)
   assert.equal(Model.parseEvent("omathock,x,1"), null)
   assert.equal(Model.parseEvent("omathock,38"), null)
   assert.equal(Model.parseEvent(undefined), null)
+})
+
+test("a plain press and release click once each", () => {
+  const state = Model.keyState()
+  assert.equal(Model.pressKey(state, 38), true)
+  assert.equal(Model.releaseKey(state, 38, "a", 1000), true)
+  assert.deepEqual(Model.dueReleases(state, 1000 + 34), [])
+  assert.deepEqual(Model.dueReleases(state, 1000 + 35), ["a"])
+  assert.equal(Model.hasPending(state), false)
+})
+
+test("the echo an input method adds is silent", () => {
+  const state = Model.keyState()
+  Model.pressKey(state, 38)
+  assert.equal(Model.pressKey(state, 38), false)
+  assert.equal(Model.releaseKey(state, 38, "a", 1000), true)
+  assert.equal(Model.releaseKey(state, 38, "a", 1000), false)
+  assert.deepEqual(Model.dueReleases(state, 1100), ["a"])
+})
+
+test("a held key repeating as press/release pairs stays one press", () => {
+  const state = Model.keyState()
+  assert.equal(Model.pressKey(state, 38), true)
+  let now = 1000
+  for (let i = 0; i < 20; i++) {
+    assert.equal(Model.releaseKey(state, 38, "a", now), true)
+    now += 25
+    assert.deepEqual(Model.dueReleases(state, now), [])
+    assert.equal(Model.pressKey(state, 38), false)
+  }
+  // Only the real lift, once the stream stops, plays the key-up sound.
+  Model.releaseKey(state, 38, "a", now)
+  assert.deepEqual(Model.dueReleases(state, now + 40), ["a"])
+})
+
+test("a held key flooding releases stays one press", () => {
+  const state = Model.keyState()
+  Model.pressKey(state, 38)
+  assert.equal(Model.releaseKey(state, 38, "a", 1000), true)
+  for (let i = 0; i < 20; i++) assert.equal(Model.releaseKey(state, 38, "a", 1000 + i), false)
+  assert.deepEqual(Model.dueReleases(state, 1100), ["a"])
+})
+
+test("deliberate re-presses and other keys stay audible", () => {
+  const state = Model.keyState()
+  Model.pressKey(state, 38)
+  Model.releaseKey(state, 38, "a", 1000)
+  assert.deepEqual(Model.dueReleases(state, 1040), ["a"])
+  assert.equal(Model.pressKey(state, 38), true)
+  assert.equal(Model.pressKey(state, 39), true)
 })
 
 test("soundFor resolves key, then alias, then default", () => {

@@ -115,6 +115,14 @@ name, and plays one of the pack's takes for that key from a preloaded
 `SoundEffect` — no file I/O, no process, no round trip on the keystroke path.
 Packs with key-up recordings click on release too.
 
+Holding a key is one sound, not a stream. That takes some care, because a held
+key looks different on every setup: nothing at all until release on a plain
+keyboard, a flood of releases from `wtype`, press/release pairs at the repeat
+rate when an input method re-emits what it grabbed — and with fcitx5 running,
+every event arrives twice. So a press only clicks when the key is not already
+down, and a release waits 35 ms before it counts; another press inside that
+window is a repeat, and the key was never really up.
+
 Runtime Lua state does not survive `hyprctl reload`, so the plugin re-registers
 on `configreloaded`. Turning the toggle off, disabling the plugin, removing it
 or hot-reloading it all remove the subscription from Hyprland.
