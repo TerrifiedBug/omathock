@@ -123,6 +123,16 @@ twice on top of that. So a press only clicks when the key is not already down,
 and a release waits 35 ms before it counts; another press inside that window is a
 repeat, and the key was never really up.
 
+Only typing keys click. Hyprland's `input.keyboard.key` fires for every
+keyboard-class device it has, and a laptop has a pile of them: lid switch, HID
+hotkeys, power button, a Bluetooth headset's AVRCP controls. A keycode that is
+not a key you type names nothing and plays nothing, so volume and brightness
+are silent. Injected input is silent too, when it can be told apart: `wtype`
+and other Wayland virtual-keyboard clients pass no hardware timestamp, and an
+event without one is dropped, so an agent typing into a terminal does not
+click. Tools that inject through `uinput`, such as `ydotool`, do carry kernel
+timestamps and are indistinguishable from a person at the keyboard.
+
 Runtime Lua state does not survive `hyprctl reload`, so the plugin re-registers
 on `configreloaded`. Turning the toggle off, disabling the plugin, removing it
 or hot-reloading it all remove the subscription from Hyprland.
