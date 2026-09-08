@@ -48,6 +48,20 @@ Item {
   // cannot be bound to either, hence a plain property fed by onLoaded.
   property var settings: ({})
 
+  // Sounds while the session is locked would put the password's keycodes on
+  // Hyprland's socket2 and fire a burst of play() calls straight through the
+  // audio-graph rebuild that follows a resume, so the hook comes off for the
+  // duration.
+  //
+  // Omarchy 4.0.3 keeps omarchy.lock out of the public service map, so a
+  // plugin cannot read the lock service. The state comes instead from
+  // omarchy-hyprland-session-locked, the helper the lock service itself uses:
+  // it reports an ext-session-lock through Hyprland's solitaryBlockedBy.
+  // Polling it costs one short-lived process a second; refreshing Quickshell's
+  // Hyprland monitors instead would blank lastIpcObject for every other
+  // consumer in the shell, which is not this plugin's to do.
+  property bool locked: false
+
   // Unlocking is the dangerous moment, not the lock itself: the resume that
   // preceded it rebuilds the audio graph, and the crash this guards against
   // landed 1.3 s after a successful unlock, with WirePlumber still relinking
@@ -78,13 +92,6 @@ Item {
     return packs.length > 0 ? packs[0] : null
   }
   readonly property string packSlug: pack ? pack.slug : ""
-
-  // Sounds while the session is locked would put the password's keycodes on
-  // Hyprland's socket2 and fire a burst of play() calls straight through the
-  // audio-graph rebuild that follows a resume. Both are worth avoiding, so
-  // the hook comes off entirely for the duration.
-  readonly property var lockService: shell && typeof shell.firstPartyServiceFor === "function" ? shell.firstPartyServiceFor("omarchy.lock") : null
-  readonly property bool locked: lockService ? lockService.locked === true : false
 
   // hl.on only exists when Hyprland runs the Lua config. usingLua starts false
   // and flips when the version query answers a beat after construction, so a
@@ -286,6 +293,28 @@ Item {
       for (var i = 0; i < due.length; i++) root.play(due[i], true)
       root.releasePending = Model.hasPending(root.keys)
     }
+  }
+
+  // 0 locked, 1 unlocked, 2 undetermined; an undetermined answer leaves the
+  // last known state alone. One process a second only while sounds are on.
+  Process {
+    id: lockProc
+    command: ["omarchy-hyprland-session-locked"]
+
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.locked = true
+      else if (exitCode === 1) root.locked = false
+    }
+  }
+
+  Timer {
+    id: lockPoll
+    interval: 1000
+    repeat: true
+    running: root.soundEnabled
+    triggeredOnStart: true
+
+    onTriggered: if (!lockProc.running) lockProc.running = true
   }
 
   // Started when the session unlocks; while it runs the hook stays off.
