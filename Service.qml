@@ -32,7 +32,14 @@ Item {
   property bool hooked: false
   property var packs: []
   property var sounds: ({})
-  property string configText: ""
+
+  // Services are not handed their inline settings, so this is the plugin's
+  // own entry read out of shell.json. It is applied locally on a write as
+  // well: the shell replaces shell.json atomically, and the rename moves the
+  // file out from under the watch, so the reload cannot be relied on to bring
+  // the value back. FileView.text() is a call rather than a property and
+  // cannot be bound to either, hence a plain property fed by onLoaded.
+  property var settings: ({})
 
   // Which keys are held and which releases are still waiting to count; the
   // rules live in Model.pressKey / releaseKey / dueReleases.
@@ -45,12 +52,6 @@ Item {
   readonly property string bundledRoot: pluginDir + "/soundpacks"
   readonly property string userRoot: (Quickshell.env("XDG_DATA_HOME") || Quickshell.env("HOME") + "/.local/share") + "/omathock/soundpacks"
 
-  // Services are not handed their inline settings, so shell.json is read
-  // directly and stays the single source of truth: a write goes out through
-  // updateEntryInline and comes back through the watched FileView below.
-  // FileView.text() is a call, not a property, so it cannot be bound to —
-  // shellConfig.onLoaded pushes it into configText and settings watches that.
-  readonly property var settings: Model.findEntry(configText, manifestId)
   // Not "enabled": that shadows Item.enabled.
   readonly property bool soundEnabled: Model.setting(settings, "enabled") !== false
   readonly property string soundpack: String(Model.setting(settings, "soundpack"))
@@ -84,6 +85,7 @@ Item {
     var entry = { id: manifestId }
     for (var existing in settings) if (existing !== "id") entry[existing] = settings[existing]
     for (var key in values) entry[key] = values[key]
+    settings = entry
     if (shell && typeof shell.updateEntryInline === "function") shell.updateEntryInline(manifestId, entry)
     else console.warn("omathock: shell has no updateEntryInline, setting not saved")
   }
@@ -135,7 +137,7 @@ Item {
     watchChanges: true
     printErrors: false
 
-    onLoaded: root.configText = text()
+    onLoaded: root.settings = Model.findEntry(text(), root.manifestId)
   }
 
   // Only the selected pack is parsed; switching packs re-points this view.
