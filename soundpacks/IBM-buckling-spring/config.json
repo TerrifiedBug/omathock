@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "name": "Buckling Spring",
+    "brand": "IBM",
+    "author": "tplai",
+    "supportsKeyUp": true,
+    "category": "keyboard"
+  },
+  "license": {
+    "type": "MIT",
+    "url": "https://github.com/tplai/kbsim/blob/master/LICENSE.md"
+  },
+  "sounds": {
+    "default": {
+      "down": [
+        "1.wav",
+        "2.wav",
+        "3.wav",
+        "4.wav",
+        "5.wav"
+      ],
+      "up": [
+        "101.wav"
+      ]
+    },
+    "space": {
+      "down": [
+        "201.wav"
+      ],
+      "up": [
+        "251.wav"
+      ]
+    },
+    "enter": {
+      "down": [
+        "301.wav"
+      ],
+      "up": [
+        "351.wav"
+      ]
+    },
+    "backspace": {
+      "down": [
+        "401.wav"
+      ],
+      "up": [
+        "451.wav"
+      ]
+    }
+  },
+  "id": "61861d39-1242-41f5-8cf9-5823c472ce28"
+}
