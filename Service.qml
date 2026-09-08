@@ -32,6 +32,7 @@ Item {
   property bool hooked: false
   property var packs: []
   property var sounds: ({})
+  property string configText: ""
 
   // Which keys are held and which releases are still waiting to count; the
   // rules live in Model.pressKey / releaseKey / dueReleases.
@@ -46,8 +47,10 @@ Item {
 
   // Services are not handed their inline settings, so shell.json is read
   // directly and stays the single source of truth: a write goes out through
-  // updateEntryInline and comes back through this watched FileView.
-  readonly property var settings: Model.findEntry(shellConfig.text(), manifestId)
+  // updateEntryInline and comes back through the watched FileView below.
+  // FileView.text() is a call, not a property, so it cannot be bound to —
+  // shellConfig.onLoaded pushes it into configText and settings watches that.
+  readonly property var settings: Model.findEntry(configText, manifestId)
   // Not "enabled": that shadows Item.enabled.
   readonly property bool soundEnabled: Model.setting(settings, "enabled") !== false
   readonly property string soundpack: String(Model.setting(settings, "soundpack"))
@@ -131,6 +134,8 @@ Item {
     path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
     watchChanges: true
     printErrors: false
+
+    onLoaded: root.configText = text()
   }
 
   // Only the selected pack is parsed; switching packs re-points this view.
