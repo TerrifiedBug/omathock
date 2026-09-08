@@ -27,4 +27,6 @@ soundpack format of kamillobinski/thock-soundpacks
   IN THE SOFTWARE.
 
 The key naming in Model.js follows the soundpack key names of
-kamillobinski/thock (https://github.com/kamillobinski/thock), licensed MIT.
+kamillobinski/thock (https://github.com/kamillobinski/thock), licensed MIT,
+and the bar mark in ThockIcon.qml is that project's app icon retraced as a
+vector path.
