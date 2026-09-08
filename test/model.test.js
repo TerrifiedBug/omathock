@@ -15,20 +15,29 @@ const mechvibes = {
   del: { down: ["b.wav"], up: [] }
 }
 
-test("keyName translates xkb codes into thock key names", () => {
+test("keyName translates typing keys and names nothing else", () => {
   assert.equal(Model.keyName(38), "a")
   assert.equal(Model.keyName(65), "space")
   assert.equal(Model.keyName(22), "backspace")
-  assert.equal(Model.keyName(999), "default")
+  assert.equal(Model.keyName(999), "")
+  // Volume up (evdev 115) is a keyboard-class event from a media device.
+  assert.equal(Model.keyName(123), "")
 })
 
 test("parseEvent accepts this plugin's events and rejects everything else", () => {
-  assert.deepEqual(Model.parseEvent("omathock,38,1"), { code: 38, name: "a", up: false })
-  assert.equal(Model.parseEvent("omathock,38,0").up, true)
-  assert.equal(Model.parseEvent("other,1,1"), null)
-  assert.equal(Model.parseEvent("omathock,x,1"), null)
-  assert.equal(Model.parseEvent("omathock,38"), null)
+  assert.deepEqual(Model.parseEvent("omathock,38,1,1200"), { code: 38, name: "a", up: false })
+  assert.equal(Model.parseEvent("omathock,38,0,1200").up, true)
+  assert.equal(Model.parseEvent("other,1,1,1200"), null)
+  assert.equal(Model.parseEvent("omathock,x,1,1200"), null)
+  assert.equal(Model.parseEvent("omathock,38,1"), null)
   assert.equal(Model.parseEvent(undefined), null)
+})
+
+test("parseEvent stays silent for media keys and injected input", () => {
+  // Brightness up (evdev 225) from the laptop's HID hotkeys.
+  assert.equal(Model.parseEvent("omathock,233,1,1200"), null)
+  // wtype and friends drive a virtual keyboard with no hardware time.
+  assert.equal(Model.parseEvent("omathock,38,1,0"), null)
 })
 
 test("a plain press and release click once each", () => {

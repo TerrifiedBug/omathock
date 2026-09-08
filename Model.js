@@ -14,14 +14,16 @@ var EVENT_TAG = "omathock"
 // Registration is remove-then-add so a re-run is idempotent without a guard
 // global: a subscription orphaned by `hyprctl reload` may refuse :remove(),
 // hence the pcall. The callback runs on the compositor thread with a 50 ms
-// budget, so it only re-emits the event — never exec, never I/O.
-var LUA_REGISTER = "if _G.__omathock then pcall(function() _G.__omathock:remove() end) end _G.__omathock = hl.on(\"input.keyboard.key\", function(code, _, state) hl.dispatch(hl.dsp.event(\"" + EVENT_TAG + ",\" .. code .. \",\" .. state)) end) return \"ok\""
+// budget, so it only re-emits the event — never exec, never I/O. The event
+// time travels with the code because parseEvent uses it to tell a real key
+// press from injected input.
+var LUA_REGISTER = "if _G.__omathock then pcall(function() _G.__omathock:remove() end) end _G.__omathock = hl.on(\"input.keyboard.key\", function(code, time, state) hl.dispatch(hl.dsp.event(\"" + EVENT_TAG + ",\" .. code .. \",\" .. state .. \",\" .. time)) end) return \"ok\""
 
 var LUA_UNREGISTER = "if _G.__omathock then pcall(function() _G.__omathock:remove() end) _G.__omathock = nil end return \"ok\""
 
 // evdev code (input-event-codes.h) -> thock key name. Right ctrl deliberately
 // reuses ctrlLeft and the keypad reuses the main-row names: no pack ships a
-// distinct sound for either, and an unmapped code falls back to "default".
+// distinct sound for either.
 var KEY_NAMES = {
   1: "esc",
   2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
@@ -46,18 +48,34 @@ var KEY_NAMES = {
 // tplai packs call it "backspace", mechvibes packs call it "del".
 var KEY_ALIASES = { backspace: "del" }
 
-// Hyprland reports xkb codes; xkb = evdev + 8.
+// Hyprland reports xkb codes; xkb = evdev + 8. An unmapped code is not a
+// typing key: "input.keyboard.key" fires for every keyboard-class device the
+// compositor has, and a laptop has many — lid switch, HID hotkeys, power
+// button, a Bluetooth headset's AVRCP controls. Those used to fall through to
+// the pack's "default" sound, which is how a thock arrives while nobody is
+// typing, so they now name no key and play nothing.
 function keyName(xkbCode) {
-  return KEY_NAMES[Number(xkbCode) - 8] || "default"
+  return KEY_NAMES[Number(xkbCode) - 8] || ""
 }
 
-// "omathock,<code>,<state>" -> { code, name, up }. Anything else is another
-// plugin's custom event and must be ignored, not guessed at.
+// "omathock,<code>,<state>,<timeMs>" -> { code, name, up }. Anything else is
+// another plugin's custom event and must be ignored, not guessed at.
+//
+// A zero timestamp means the event carries no hardware time, which is what
+// injected input looks like: `wtype` and friends drive a Wayland virtual
+// keyboard and pass no time base, while a real key press, including one an
+// input method re-emits, keeps the original event time. Automation typing
+// into a terminal should not click. Tools that inject through uinput do carry
+// kernel timestamps and are indistinguishable from a person, so this catches
+// the common case rather than every case.
 function parseEvent(data) {
   var parts = String(data === undefined || data === null ? "" : data).split(",")
-  if (parts.length !== 3 || parts[0] !== EVENT_TAG) return null
-  if (!/^\d+$/.test(parts[1]) || (parts[2] !== "0" && parts[2] !== "1")) return null
-  return { code: Number(parts[1]), name: keyName(parts[1]), up: parts[2] === "0" }
+  if (parts.length !== 4 || parts[0] !== EVENT_TAG) return null
+  if (!/^\d+$/.test(parts[1]) || (parts[2] !== "0" && parts[2] !== "1") || !/^\d+$/.test(parts[3])) return null
+  if (Number(parts[3]) === 0) return null
+  var name = keyName(parts[1])
+  if (name === "") return null
+  return { code: Number(parts[1]), name: name, up: parts[2] === "0" }
 }
 
 // How long a release waits before it counts as a release. Key repeat runs at
