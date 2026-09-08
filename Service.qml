@@ -168,9 +168,11 @@ Item {
     syncHook()
   }
 
-  // The poller only runs while sounds are on, so whatever it last saw is
-  // stale by the time they come back: the session may have locked meanwhile.
-  onSoundEnabledChanged: if (soundEnabled) lockKnown = false
+  // The poller only runs while sounds are on, so whatever it last saw goes
+  // stale the moment they go off. Cleared on the way out as well as the way
+  // in: leaving a stale value behind lets hookWanted re-evaluate on the
+  // enable edge, before this handler runs, and arm from it.
+  onSoundEnabledChanged: lockKnown = false
 
   // Set on the way in, cleared only by the timer on the way out. Assigning it
   // here on unlock would be too late: hookWanted binds to `locked` too, and
