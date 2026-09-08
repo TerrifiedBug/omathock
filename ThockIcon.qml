@@ -23,17 +23,15 @@ Item {
   width: iconSize
   height: iconSize
 
+  // Drawn at design size and scaled as an item: a layer or a Shape transform
+  // would rasterise into the (small) item rect first and clip the mark away.
   Shape {
-    anchors.fill: parent
+    width: 64
+    height: 64
+    transformOrigin: Item.TopLeft
+    scale: root.width / 64
     antialiasing: true
-    layer.enabled: true
-    layer.samples: 4
     preferredRendererType: Shape.CurveRenderer
-
-    transform: Scale {
-      xScale: root.width / 64
-      yScale: root.height / 64
-    }
 
     ShapePath {
       fillColor: root.color
