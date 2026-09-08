@@ -46,6 +46,13 @@ Item {
   // cannot be bound to either, hence a plain property fed by onLoaded.
   property var settings: ({})
 
+  // Unlocking is the dangerous moment, not the lock itself: the resume that
+  // preceded it rebuilds the audio graph, and the crash this guards against
+  // landed 1.3 s after a successful unlock, with WirePlumber still relinking
+  // 4 s later. So the hook stays off a little past the unlock rather than
+  // re-arming into the rebuild.
+  property bool unlockSettling: false
+
   // Which keys are held and which releases are still waiting to count; the
   // rules live in Model.pressKey / releaseKey / dueReleases.
   property var keys: Model.keyState()
@@ -81,10 +88,10 @@ Item {
   // and flips when the version query answers a beat after construction, so a
   // false here is not yet a verdict — the Connections below retry on change.
   readonly property bool luaReady: Hyprland.usingLua === true
-  readonly property bool hookWanted: soundEnabled && luaReady && !locked
+  readonly property bool hookWanted: soundEnabled && luaReady && !locked && !unlockSettling
 
   function play(name, up) {
-    if (locked) return
+    if (locked || unlockSettling) return
     var file = Model.soundFor(sounds, name, up, Math.random())
     if (!file) return
     var effect = pool.objectAt(files.indexOf(file))
@@ -144,6 +151,12 @@ Item {
     keys = Model.keyState()
     releasePending = false
     syncHook()
+  }
+
+  onLockedChanged: {
+    unlockSettling = !locked
+    if (locked) unlockSettle.stop()
+    else unlockSettle.restart()
   }
 
   // Unload (disable, remove, hot reload) must take the hook with it, and the
@@ -280,6 +293,14 @@ Item {
       for (var i = 0; i < due.length; i++) root.play(due[i], true)
       root.releasePending = Model.hasPending(root.keys)
     }
+  }
+
+  // Started when the session unlocks; while it runs the hook stays off.
+  Timer {
+    id: unlockSettle
+    interval: 4000
+
+    onTriggered: root.unlockSettling = false
   }
 
   // usingLua only ever flips false -> true, so a legacy hyprland.conf leaves
