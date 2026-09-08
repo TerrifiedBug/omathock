@@ -127,6 +127,20 @@ Runtime Lua state does not survive `hyprctl reload`, so the plugin re-registers
 on `configreloaded`. Turning the toggle off, disabling the plugin, removing it
 or hot-reloading it all remove the subscription from Hyprland.
 
+## On the lock screen
+
+A locked session is silent, and the Lua hook is removed for as long as it
+lasts, so the keys of your password never reach Hyprland's socket2 either.
+
+Sounds come back about four seconds after you unlock. That pause is
+deliberate. A resume rebuilds the audio graph underneath the shell, and Qt
+shares one refcounted audio engine per output device across every sound in the
+process; on quickshell 0.3.1 with Qt 6.11.2 that engine has been seen to be
+destroyed while its realtime callback was still running, which takes the whole
+shell down for a second while it restarts. Typing into that rebuild is the way
+to meet it, so the hook waits for the graph to settle before it goes back on.
+The underlying fault is Qt's, in `QRtAudioEngine::audioCallback`.
+
 ## Privacy
 
 While sounds are on, keycodes travel on Hyprland's socket2, which is readable by
