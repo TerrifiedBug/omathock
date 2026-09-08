@@ -7,10 +7,12 @@ and the bar button gives you a toggle, the soundpack picker and a volume slider.
 It is [thock](https://github.com/kamillobinski/thock) for Omarchy, and it plays
 thock's soundpacks unchanged. The other keyboard-sound plugins on Linux read
 `/dev/input`, which means adding yourself to the `input` group and running a
-daemon or a compiled binary next to the shell. This one needs no group, no
-daemon and no binary. Hyprland already sees every key and its Lua state is
-scriptable over IPC, so the plugin asks the compositor to re-broadcast keycodes
-and plays the WAVs inside the shell process you are already running.
+daemon or a compiled binary next to the shell. This one needs no group
+membership and nothing compiled or installed of its own. Hyprland already sees
+every key and its Lua state is scriptable over IPC, so the plugin asks the
+compositor to re-broadcast keycodes and plays the WAVs inside the shell process
+you are already running. The only process it starts is a once-a-second call to
+an Omarchy helper that reports whether the session is locked.
 
 ![the OmaThock panel: toggle, soundpack picker, volume slider](preview.png)
 
@@ -26,6 +28,11 @@ and no files outside `~/.config/omarchy`.
 Requires Hyprland's Lua config (`~/.config/hypr/hyprland.lua`, the Omarchy 4
 default). On a legacy `hyprland.conf` there is no key event to hook and the
 panel says so.
+
+While sounds are enabled the service runs `omarchy-hyprland-session-locked`
+once a second to find out whether the session is locked. That helper ships
+with Omarchy and runs `hyprctl` and `jq`. It is the only background process
+the plugin creates, and the keystroke path itself still spawns nothing.
 
 ## Using it
 
