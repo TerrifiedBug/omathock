@@ -80,6 +80,10 @@ Item {
   property var keys: Model.keyState()
   property bool releasePending: false
 
+  // Armed by setSoundpack; the click fires once the picked pack's config has
+  // loaded, which is when the pool points at its WAVs.
+  property bool sampleOnLoad: false
+
   readonly property string manifestId: manifest && manifest.id ? manifest.id : "io.github.terrifiedbug.omathock"
 
   readonly property string pluginDir: Model.dirFromUrl(Qt.resolvedUrl("."))
@@ -144,7 +148,8 @@ Item {
   }
 
   function setSoundpack(slug) {
-    for (var i = 0; i < packs.length; i++) if (packs[i].slug === slug) { persist({ soundpack: slug }); return }
+    if (slug === soundpack) return
+    for (var i = 0; i < packs.length; i++) if (packs[i].slug === slug) { sampleOnLoad = true; persist({ soundpack: slug }); return }
   }
 
   function setVolume(percent) {
@@ -227,9 +232,10 @@ Item {
         console.warn("omathock: unreadable soundpack config:", path)
       }
       root.refreshFiles()
+      if (root.sampleOnLoad) { root.sampleOnLoad = false; root.play("default", false) }
     }
 
-    onPathChanged: if (path === "") { root.sounds = ({}); root.refreshFiles() }
+    onPathChanged: if (path === "") { root.sampleOnLoad = false; root.sounds = ({}); root.refreshFiles() }
   }
 
   // A missing user root makes find exit 1 after listing the bundled root;

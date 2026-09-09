@@ -42,7 +42,7 @@ unmute; the icon dims when sounds are off.
 | Control    | Does                                                      |
 | ---------- | --------------------------------------------------------- |
 | Toggle     | Turns the key hook on and off; off removes it from Hyprland |
-| Soundpack  | Every pack found on disk, bundled and your own            |
+| Soundpack  | Every pack found on disk; picking one plays a sample click |
 | Volume     | 0–100; releasing the slider plays a sample click          |
 | `Esc`      | Closes the panel                                          |
 
