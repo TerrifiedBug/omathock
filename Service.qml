@@ -107,10 +107,18 @@ Item {
 
   function play(name, up) {
     if (!lockKnown || locked || unlockSettling) return
-    var file = Model.soundFor(sounds, name, up, Math.random())
-    if (!file) return
-    var effect = pool.objectAt(files.indexOf(file))
-    if (effect) effect.play()
+    var takes = Model.takesFor(sounds, name, up)
+    if (takes.length === 0) return
+    // Start at a random take so repeats do not machine-gun, then walk to the
+    // first one not still ringing: SoundEffect.play() restarts a playing
+    // effect, which clips its tail. Every take busy: restart the first pick.
+    var start = Math.floor(Math.random() * takes.length)
+    for (var i = 0; i < takes.length; i++) {
+      var effect = pool.objectAt(files.indexOf(takes[(start + i) % takes.length]))
+      if (effect && !effect.playing) { effect.play(); return }
+    }
+    var busy = pool.objectAt(files.indexOf(takes[start]))
+    if (busy) busy.play()
   }
 
   // Called after every soundpack read: a watcher firing on an unchanged file

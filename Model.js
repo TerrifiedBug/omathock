@@ -139,11 +139,11 @@ function hasPending(state) {
   return Object.keys(state.pending).length > 0
 }
 
-// Pick one WAV for a key press/release. `r` is a caller-supplied [0,1) so the
-// choice stays testable; packs ship several takes per key to avoid machine-gun
-// repetition. Falls through key -> alias -> "default", and a direction the
-// pack does not record (most have no key-up) yields "" — play nothing.
-function soundFor(sounds, name, up, r) {
+// Every WAV a pack can play for a key press/release, in pack order. Falls
+// through key -> alias -> "default"; a direction the pack does not record
+// (most have no key-up) yields [] — play nothing. The caller picks the take:
+// Service.play prefers one that is not still ringing.
+function takesFor(sounds, name, up) {
   var pack = sounds || {}
   var entry = pack[name] || pack[KEY_ALIASES[name]] || pack.default
   var list = entry ? (up ? entry.up : entry.down) : null
@@ -151,8 +151,8 @@ function soundFor(sounds, name, up, r) {
     var fallback = pack.default
     list = fallback ? (up ? fallback.up : fallback.down) : null
   }
-  if (!list || list.length === undefined || list.length === 0) return ""
-  return list[Math.floor(r * list.length)]
+  if (!list || list.length === undefined || list.length === 0) return []
+  return list
 }
 
 // Every distinct WAV a pack can play, sorted — the model for the SoundEffect
@@ -264,7 +264,7 @@ if (typeof module !== "undefined") {
     releaseKey: releaseKey,
     dueReleases: dueReleases,
     hasPending: hasPending,
-    soundFor: soundFor,
+    takesFor: takesFor,
     packFiles: packFiles,
     sameList: sameList,
     packLabel: packLabel,

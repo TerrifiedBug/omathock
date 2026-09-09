@@ -100,20 +100,15 @@ test("deliberate re-presses and other keys stay audible", () => {
   assert.equal(Model.pressKey(state, 39), true)
 })
 
-test("soundFor resolves key, then alias, then default", () => {
-  assert.equal(Model.soundFor(tplai, "backspace", false, 0), "301.wav")
-  assert.equal(Model.soundFor(mechvibes, "backspace", false, 0), "b.wav")
-  assert.equal(Model.soundFor(tplai, "f7", false, 0), "1.wav")
+test("takesFor resolves key, then alias, then default", () => {
+  assert.deepEqual(Model.takesFor(tplai, "backspace", false), ["301.wav"])
+  assert.deepEqual(Model.takesFor(mechvibes, "backspace", false), ["b.wav"])
+  assert.deepEqual(Model.takesFor(tplai, "f7", false), ["1.wav", "2.wav", "3.wav"])
 })
 
-test("soundFor stays silent when the pack has no recording for the direction", () => {
-  assert.equal(Model.soundFor(mechvibes, "backspace", true, 0), "")
-  assert.equal(Model.soundFor({}, "a", false, 0), "")
-})
-
-test("soundFor picks a take from the caller's random draw", () => {
-  assert.equal(Model.soundFor(tplai, "a", false, 0), "1.wav")
-  assert.equal(Model.soundFor(tplai, "a", false, 0.99), "3.wav")
+test("takesFor is empty when the pack has no recording for the direction", () => {
+  assert.deepEqual(Model.takesFor(mechvibes, "backspace", true), [])
+  assert.deepEqual(Model.takesFor({}, "a", false), [])
 })
 
 test("packFiles is the sorted unique union of every take", () => {
