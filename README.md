@@ -1,8 +1,9 @@
 # OmaThock
 
-Every key you press makes a mechanical keyboard sound. Ten switch recordings are
-bundled, including Holy Panda, Alpaca, Ink Black, Box Navy and buckling spring,
-and the bar button gives you a toggle, the soundpack picker and a volume slider.
+Every key you press makes a mechanical keyboard sound. Seventeen switch
+recordings are bundled, including Holy Panda, Alpaca, Cherry MX Blue and Brown,
+Ink Black, Box Navy and buckling spring, and the bar button gives you a toggle,
+the soundpack picker and a volume slider.
 
 It is [thock](https://github.com/kamillobinski/thock) for Omarchy, and it plays
 thock's soundpacks unchanged. The other keyboard-sound plugins on Linux read
@@ -79,17 +80,24 @@ Bundled, all recorded by [tplai](https://github.com/tplai/kbsim) and packaged by
 `gateron-ink-red` · `gateron-turquoise-tealios` · `kailh-box-navy` ·
 `novelkeys-cream` · `topre` · `IBM-buckling-spring`
 
+Also bundled, recorded by [mechvibes](https://github.com/hainguyents13/mechvibes)
+and packaged the same way:
+
+`cherry-mx-black` · `cherry-mx-blue` · `cherry-mx-brown` ·
+`cherry-mx-brown-pbt` · `cherry-mx-red` · `everglide-crystal-purple` ·
+`everglide-oreo`
+
 Add your own from thock's collection, or any pack in the same format, which is a
 flat folder holding a `config.json` and its WAVs:
 
 ```bash
-mkdir -p ~/.local/share/omathock/soundpacks/cherry-mx-brown
-curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/keyboard/cherry_mx/mechvibes/brown_abs/186ca33e-9998-4a28-974c-c21ac353c16e.zip \
-  | bsdtar -xf - -C ~/.local/share/omathock/soundpacks/cherry-mx-brown
+mkdir -p ~/.local/share/omathock/soundpacks/cherry-mx-red-pbt
+curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/keyboard/cherry_mx/mechvibes/red_pbt/e05fa018-400e-4d9c-b357-d5467b07650c.zip \
+  | bsdtar -xf - -C ~/.local/share/omathock/soundpacks/cherry-mx-red-pbt
 ```
 
 Reopen the panel and it is in the list. The directory name is the pack's name,
-so `cherry-mx-brown` shows up as "Cherry Mx Brown", and a user pack with the same
+so `cherry-mx-red-pbt` shows up as "Cherry Mx Red Pbt", and a user pack with the same
 name as a bundled one replaces it. Packs must be WAV, because `SoundEffect` does
 not decode OGG. Mouse packs are not supported: Hyprland's Lua bus has no
 mouse-button event.
@@ -195,4 +203,4 @@ Qt-free: `node --test test/`.
 ## License
 
 MIT, see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed recordings
-by Thomas Lai; see [NOTICE](NOTICE).
+by Thomas Lai and by mechvibes; see [NOTICE](NOTICE).
