@@ -42,6 +42,9 @@ var KEY_NAMES = {
   96: "enter", 97: "ctrlLeft", 98: "/", 100: "optionRight",
   102: "home", 103: "arrUp", 104: "pgUp", 105: "arrLeft", 106: "arrRight",
   107: "end", 108: "arrDown", 109: "pgDn",
+  // Delete reuses the backspace take: no pack records a forward delete.
+  // Insert has no name in any pack and falls through to "default".
+  110: "insert", 111: "backspace",
   125: "command", 126: "command"
 }
 

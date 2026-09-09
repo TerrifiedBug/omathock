@@ -19,6 +19,8 @@ test("keyName translates typing keys and names nothing else", () => {
   assert.equal(Model.keyName(38), "a")
   assert.equal(Model.keyName(65), "space")
   assert.equal(Model.keyName(22), "backspace")
+  assert.equal(Model.keyName(119), "backspace")
+  assert.equal(Model.keyName(118), "insert")
   assert.equal(Model.keyName(999), "")
   // Volume up (evdev 115) is a keyboard-class event from a media device.
   assert.equal(Model.keyName(123), "")
