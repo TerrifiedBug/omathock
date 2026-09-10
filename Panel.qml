@@ -1,4 +1,6 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -16,17 +18,27 @@ Panel {
   manageIpc: false
 
   readonly property var service: bar && bar.shell && typeof bar.shell.serviceFor === "function" ? bar.shell.serviceFor(moduleName) : null
-  readonly property bool soundEnabled: service ? service.soundEnabled : false
-  readonly property string soundpack: service ? service.packSlug : ""
-  readonly property int volume: service ? service.volume : Model.DEFAULTS.volume
-  readonly property var packOptions: (service ? service.packs : []).map(function(p) {
-    return { value: p.slug, label: Model.packLabel(p.slug) }
+  property var ipcState: ({})
+  property bool ipcStatusKnown: false
+  property bool ipcRefreshPending: false
+  property string ipcProblem: ""
+
+  readonly property bool soundEnabled: service ? service.soundEnabled : ipcState.enabled === true
+  readonly property string soundpack: service ? service.packSlug : String(ipcState.soundpack || "")
+  readonly property int volume: service ? service.volume
+    : (ipcStatusKnown ? Model.normalizeVolume(ipcState.volume) : Model.DEFAULTS.volume)
+  readonly property bool luaReady: service ? service.luaReady : ipcState.lua === true
+  readonly property var packSlugs: service
+    ? service.packs.map(function(p) { return p.slug })
+    : (ipcState.packs || [])
+  readonly property var packOptions: packSlugs.map(function(slug) {
+    return { value: slug, label: Model.packLabel(slug) }
   })
 
   // One line of why nothing is clicking, rather than a dead panel.
   readonly property string problem:
-    !service ? "Service not loaded — restart the shell"
-    : !service.luaReady ? "Needs Hyprland's Lua config (hyprland.lua)"
+    !service && !ipcStatusKnown ? (ipcProblem || "Connecting to OmaThock…")
+    : !luaReady ? "Needs Hyprland's Lua config (hyprland.lua)"
     : packOptions.length === 0 ? "No soundpacks found"
     : ""
 
@@ -40,11 +52,104 @@ Panel {
 
   // Packs dropped into ~/.local/share/omathock/soundpacks show up on open,
   // without a restart.
-  onOpenedChanged: if (opened && service) service.refreshPacks()
+  onOpenedChanged: if (opened) refreshPacks()
 
   // Dropdown assigns its own `value` when a row is picked, which breaks the
   // binding; re-push the service's value so an IPC or CLI change stays visible.
   onSoundpackChanged: packDropdown.value = soundpack
+
+  // A widget hosted by another third-party plugin receives that host's
+  // scoped shell facade, so serviceFor() intentionally cannot return this
+  // plugin's service. Its public IPC target remains available: use that as
+  // the hosted path while retaining direct calls for a normal bar slot.
+  function requestIpcStatus() {
+    if (service) return
+    if (statusProc.running) {
+      ipcRefreshPending = true
+      return
+    }
+    statusProc.running = true
+  }
+
+  function callIpc(method, argument) {
+    var command = ["omarchy-shell", "omathock", method]
+    if (argument !== undefined) command.push(String(argument))
+    Quickshell.execDetached(command)
+    ipcRefreshTimer.restart()
+  }
+
+  function setEnabled(on) {
+    if (service) service.setEnabled(on)
+    else callIpc(on ? "enable" : "disable")
+  }
+
+  function setSoundpack(slug) {
+    if (service) service.setSoundpack(slug)
+    else callIpc("soundpack", slug)
+  }
+
+  function refreshPacks() {
+    if (service) service.refreshPacks()
+    else callIpc("refresh")
+  }
+
+  function setVolumeAndPreview(percent) {
+    if (service) {
+      service.setVolume(percent)
+      service.play("default", false)
+    } else {
+      callIpc("previewVolume", percent)
+    }
+  }
+
+  Component.onCompleted: Qt.callLater(requestIpcStatus)
+  onServiceChanged: if (!service) Qt.callLater(requestIpcStatus)
+
+  FileView {
+    path: root.service ? "" : Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    watchChanges: true
+    printErrors: false
+
+    onFileChanged: reload()
+    onLoaded: root.requestIpcStatus()
+  }
+
+  Process {
+    id: statusProc
+    command: ["omarchy-shell", "omathock", "status"]
+
+    stdout: StdioCollector {
+      waitForEnd: true
+
+      onStreamFinished: {
+        try {
+          root.ipcState = JSON.parse(String(text || "").trim())
+          root.ipcStatusKnown = true
+          root.ipcProblem = ""
+        } catch (e) {
+          root.ipcStatusKnown = false
+          root.ipcProblem = "Service not loaded — restart the shell"
+        }
+      }
+    }
+
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.ipcStatusKnown = false
+        root.ipcProblem = "Service not loaded — restart the shell"
+      }
+      if (root.ipcRefreshPending) {
+        root.ipcRefreshPending = false
+        ipcRefreshTimer.restart()
+      }
+    }
+  }
+
+  Timer {
+    id: ipcRefreshTimer
+    interval: 200
+    onTriggered: root.requestIpcStatus()
+  }
 
   BarIconButton {
     id: button
@@ -67,7 +172,7 @@ Panel {
     tooltipText: root.soundEnabled ? "OmaThock on — right-click to mute" : "OmaThock off — right-click to enable"
 
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) { if (root.service) root.service.setEnabled(!root.soundEnabled) }
+      if (buttonCode === Qt.RightButton) root.setEnabled(!root.soundEnabled)
       else root.toggle()
     }
   }
@@ -108,7 +213,7 @@ Panel {
           foreground: root.contentForeground
           fontFamily: root.contentFontFamily
 
-          onClicked: if (root.service) root.service.setEnabled(!root.soundEnabled)
+          onClicked: root.setEnabled(!root.soundEnabled)
         }
 
         Dropdown {
@@ -120,7 +225,7 @@ Panel {
           foreground: root.contentForeground
           fontFamily: root.contentFontFamily
 
-          onChanged: function(value) { if (root.service) root.service.setSoundpack(value) }
+          onChanged: function(value) { root.setSoundpack(value) }
         }
 
         // Volume caption styled like Dropdown's own label so the two rows read
@@ -146,9 +251,7 @@ Panel {
 
           // Sample click on release: the level is only meaningful heard.
           onReleased: function(value) {
-            if (!root.service) return
-            root.service.setVolume(value)
-            root.service.play("default", false)
+            root.setVolumeAndPreview(value)
           }
         }
 
