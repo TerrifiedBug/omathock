@@ -394,6 +394,16 @@ Item {
       return "ok"
     }
 
+    function enable(): string {
+      root.setEnabled(true)
+      return "ok"
+    }
+
+    function disable(): string {
+      root.setEnabled(false)
+      return "ok"
+    }
+
     function soundpack(slug: string): string {
       for (var i = 0; i < root.packs.length; i++) if (root.packs[i].slug === slug) { root.setSoundpack(slug); return "ok" }
       return "unknown"
@@ -406,6 +416,12 @@ Item {
 
     function refresh(): string {
       root.refreshPacks()
+      return "ok"
+    }
+
+    function previewVolume(percent: int): string {
+      root.setVolume(percent)
+      root.play("default", false)
       return "ok"
     }
   }

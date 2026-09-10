@@ -40,6 +40,11 @@ the plugin creates, and the keystroke path itself still spawns nothing.
 Left-click the thock mark in the bar for the panel. Right-click it to mute and
 unmute; the icon dims when sounds are off.
 
+The controls also work when OmaThock is hosted inside another third-party bar
+widget. Omarchy scopes direct service access to the hosting plugin in that
+case, so OmaThock falls back to its public IPC target and mirrors the service
+state asynchronously.
+
 | Control    | Does                                                      |
 | ---------- | --------------------------------------------------------- |
 | Toggle     | Turns the key hook on and off; off removes it from Hyprland |
