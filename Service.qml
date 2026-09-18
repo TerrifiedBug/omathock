@@ -295,7 +295,12 @@ Item {
       onRead: function(line) { root.playerStderr = String(line).trim() }
     }
 
-    onStarted: root.playerAttempts += 1
+    // A fresh start owes a fresh reason: the last run's stderr must not be
+    // reported for this one.
+    onStarted: {
+      root.playerAttempts += 1
+      root.playerStderr = ""
+    }
 
     // Five exits inside thirty seconds is a helper that cannot run (no
     // python3, no libpulse, unreadable file): stop and say so rather than
