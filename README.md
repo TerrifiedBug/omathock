@@ -6,14 +6,15 @@ Ink Black, Box Navy and buckling spring, and the bar button gives you a toggle,
 the soundpack picker and a volume slider.
 
 It is [thock](https://github.com/kamillobinski/thock) for Omarchy, and it plays
-thock's soundpacks unchanged. The other keyboard-sound plugins on Linux read
-`/dev/input`, which means adding yourself to the `input` group and running a
-daemon or a compiled binary next to the shell. This one needs no group
-membership and nothing compiled or installed of its own. Hyprland already sees
-every key and its Lua state is scriptable over IPC, so the plugin asks the
-compositor to re-broadcast keycodes and plays the WAVs inside the shell process
-you are already running. The only process it starts is a once-a-second call to
-an Omarchy helper that reports whether the session is locked.
+thock's soundpacks unchanged, along with Mechvibes and MechvibesDX packs. The
+other keyboard-sound plugins on Linux read `/dev/input`, which means adding
+yourself to the `input` group and running a daemon or a compiled binary next
+to the shell. This one needs no group membership and nothing compiled or
+installed of its own. Hyprland already sees every key and its Lua state is
+scriptable over IPC, so the plugin asks the compositor to re-broadcast
+keycodes. The sounds are mixed by a small Python script the shell starts and
+supervises, so a broken audio stack can take the player down without taking
+the shell with it.
 
 ![the OmaThock panel: toggle, soundpack picker, volume slider](preview.png)
 
@@ -30,10 +31,12 @@ Requires Hyprland's Lua config (`~/.config/hypr/hyprland.lua`, the Omarchy 4
 default). On a legacy `hyprland.conf` there is no key event to hook and the
 panel says so.
 
-While sounds are enabled the service runs `omarchy-hyprland-session-locked`
-once a second to find out whether the session is locked. That helper ships
-with Omarchy and runs `hyprctl` and `jq`. It is the only background process
-the plugin creates, and the keystroke path itself still spawns nothing.
+While sounds are enabled the service runs two things. `player.py`, a Python
+script from the standard library only, stays up and mixes the samples into one
+PipeWire stream; it exits when the shell does. And
+`omarchy-hyprland-session-locked`, an Omarchy helper that runs `hyprctl` and
+`jq`, is called once a second to find out whether the session is locked. The
+keystroke path itself still spawns nothing.
 
 ## Using it
 
@@ -92,8 +95,10 @@ and packaged the same way:
 `cherry-mx-brown-pbt` · `cherry-mx-red` · `everglide-crystal-purple` ·
 `everglide-oreo`
 
-Add your own from thock's collection, or any pack in the same format, which is a
-flat folder holding a `config.json` and its WAVs:
+Add your own from thock's collection, from
+[mechvibes.com](https://mechvibes.com), or from a MechvibesDX pack. Any of
+the three formats works as a folder holding its `config.json` and its audio,
+dropped in `~/.local/share/omathock/soundpacks/`:
 
 ```bash
 mkdir -p ~/.local/share/omathock/soundpacks/cherry-mx-red-pbt
@@ -103,9 +108,13 @@ curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/ke
 
 Reopen the panel and it is in the list. The directory name is the pack's name,
 so `cherry-mx-red-pbt` shows up as "Cherry Mx Red Pbt", and a user pack with the same
-name as a bundled one replaces it. Packs must be WAV, because `SoundEffect` does
-not decode OGG. Mouse packs are not supported: Hyprland's Lua bus has no
-mouse-button event.
+name as a bundled one replaces it.
+
+Mechvibes packs play as they are: `multi` packs with one file per key,
+`single` packs that cut every key out of one sprite file, `{0-4}` variant
+ranges, and `-up` release sounds. OGG and MP3 are decoded by the `ffmpeg`
+Omarchy already ships. Mouse packs are not supported: Hyprland's Lua bus has
+no mouse-button event.
 
 ## IPC
 
@@ -131,9 +140,20 @@ That callback runs on Hyprland's main thread with a 50 ms budget, so it does the
 absolute minimum: it re-emits the keycode as a `custom>>omathock,<code>,<state>`
 line on Hyprland's socket2. Quickshell is already listening to socket2, so the
 key arrives inside the shell, gets translated from evdev code to a thock key
-name, and plays one of the pack's takes for that key from a preloaded
-`SoundEffect`. The keystroke path itself does no file I/O, spawns no process and
-makes no round trip. Packs with key-up recordings click on release too.
+name, and one of the pack's takes for that key is written as a JSON line to
+`player.py`. The player decoded the whole pack into memory when it loaded, so
+the keystroke path does no file I/O, spawns no process and makes no round trip;
+the click starts 15 to 25 ms after the key. Packs with key-up recordings click
+on release too.
+
+The player is a Python script from the standard library only. It mixes up to
+sixteen overlapping key sounds into one stereo stream through
+`libpulse-simple`, which PipeWire serves. Its stdin is a pipe from the shell,
+so when the shell exits or reloads the plugin, the pipe closes and the player
+exits with it. The shell watches a two-second heartbeat from the player and
+restarts it if it dies or stops answering; after five failures in thirty
+seconds the panel says "Sound player failed" with the reason, and reopening the
+panel or `omarchy-shell omathock refresh` tries again.
 
 Holding a key gives one sound. That takes some care, because a held key looks
 different on every setup: nothing at all until release on a plain keyboard, a
@@ -168,14 +188,14 @@ subscribe to. That leaves up to about a second between the lock appearing and
 the hook coming off, which is a real gap if you start typing your password
 instantly.
 
-Sounds come back about four seconds after you unlock. That pause is
-deliberate. A resume rebuilds the audio graph underneath the shell, and Qt
-shares one refcounted audio engine per output device across every sound in the
-process; on quickshell 0.3.1 with Qt 6.11.2 that engine has been seen to be
-destroyed while its realtime callback was still running, which takes the whole
-shell down for a second while it restarts. Typing into that rebuild is the way
-to meet it, so the hook waits for the graph to settle before it goes back on.
-The underlying fault is Qt's, in `QRtAudioEngine::audioCallback`.
+Sounds come back on the very next key after you unlock.
+
+Audio used to run inside the shell on QtMultimedia. Qt 6.11.2's PipeWire
+backend can wedge the shell after a WirePlumber restart:
+`QPipewireAudioSinkStream::stateChanged()` drops the stream's last reference
+from PipeWire's thread, its `QSocketNotifier` is left on a closed eventfd and
+the main thread spins. So playback moved out of the process. The shell now
+only writes a line to a pipe, and a player that dies gets restarted.
 
 ## Privacy
 
@@ -203,7 +223,9 @@ Clone it, `omarchy plugin add "file://$PWD" --enable`, and edit the installed
 copy in `~/.config/omarchy/plugins/io.github.terrifiedbug.omathock`. Saving a
 file reloads the plugin; bar widgets already mounted need
 `omarchy-restart-shell`. The key mapping and pack logic in `Model.js` are
-Qt-free: `node --test test/`.
+Qt-free: `node --test test/`. The player has its own tests, which fake
+libpulse: `python3 -m unittest discover -s test -p 'test_*.py'`. Set
+`OMATHOCK_TEST_AUDIO=1` to add one real run against PipeWire.
 
 ## License
 

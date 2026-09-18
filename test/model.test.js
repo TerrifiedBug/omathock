@@ -2,17 +2,19 @@ const test = require("node:test")
 const assert = require("node:assert")
 const Model = require("../Model.js")
 
+const take = (file, start = 0, end = 0) => ({ file, start, end })
+
 // A tplai-shaped pack: several takes for down, one for up.
 const tplai = {
-  default: { down: ["1.wav", "2.wav", "3.wav"], up: ["101.wav"] },
-  space: { down: ["201.wav"], up: ["251.wav"] },
-  backspace: { down: ["301.wav"], up: ["351.wav"] }
+  default: { down: [take("1.wav"), take("2.wav"), take("3.wav")], up: [take("101.wav")] },
+  space: { down: [take("201.wav")], up: [take("251.wav")] },
+  backspace: { down: [take("301.wav")], up: [take("351.wav")] }
 }
 
 // A mechvibes-shaped pack: no key-up recordings, backspace spelled "del".
 const mechvibes = {
-  default: { down: ["a.wav"], up: [] },
-  del: { down: ["b.wav"], up: [] }
+  default: { down: [take("a.wav")], up: [] },
+  del: { down: [take("b.wav")], up: [] }
 }
 
 test("keyName translates typing keys and names nothing else", () => {
@@ -83,14 +85,6 @@ test("a held key flooding releases stays one press", () => {
   assert.deepEqual(Model.dueReleases(state, 1100), ["a"])
 })
 
-test("sameList tells an unchanged pack from a real switch", () => {
-  assert.equal(Model.sameList(["1.wav", "2.wav"], ["1.wav", "2.wav"]), true)
-  assert.equal(Model.sameList(["1.wav"], ["1.wav", "2.wav"]), false)
-  assert.equal(Model.sameList(["1.wav", "2.wav"], ["2.wav", "1.wav"]), false)
-  assert.equal(Model.sameList([], []), true)
-  assert.equal(Model.sameList(null, []), false)
-})
-
 test("deliberate re-presses and other keys stay audible", () => {
   const state = Model.keyState()
   Model.pressKey(state, 38)
@@ -101,9 +95,9 @@ test("deliberate re-presses and other keys stay audible", () => {
 })
 
 test("takesFor resolves key, then alias, then default", () => {
-  assert.deepEqual(Model.takesFor(tplai, "backspace", false), ["301.wav"])
-  assert.deepEqual(Model.takesFor(mechvibes, "backspace", false), ["b.wav"])
-  assert.deepEqual(Model.takesFor(tplai, "f7", false), ["1.wav", "2.wav", "3.wav"])
+  assert.deepEqual(Model.takesFor(tplai, "backspace", false), [take("301.wav")])
+  assert.deepEqual(Model.takesFor(mechvibes, "backspace", false), [take("b.wav")])
+  assert.deepEqual(Model.takesFor(tplai, "f7", false), [take("1.wav"), take("2.wav"), take("3.wav")])
 })
 
 test("takesFor is empty when the pack has no recording for the direction", () => {
@@ -111,9 +105,104 @@ test("takesFor is empty when the pack has no recording for the direction", () =>
   assert.deepEqual(Model.takesFor({}, "a", false), [])
 })
 
-test("packFiles is the sorted unique union of every take", () => {
-  assert.deepEqual(Model.packFiles(tplai), ["1.wav", "101.wav", "2.wav", "201.wav", "251.wav", "3.wav", "301.wav", "351.wav"])
-  assert.deepEqual(Model.packFiles({ a: { down: ["x.wav"] }, b: { down: ["x.wav"], up: ["x.wav"] } }), ["x.wav"])
+test("packTakes is the union of every take, deduped by slice and sorted", () => {
+  assert.deepEqual(Model.packTakes(tplai).map(Model.takeKey),
+    ["1.wav@0-0", "101.wav@0-0", "2.wav@0-0", "201.wav@0-0", "251.wav@0-0", "3.wav@0-0", "301.wav@0-0", "351.wav@0-0"])
+  const slice = take("sound.ogg", 100, 200)
+  const other = take("sound.ogg", 300, 350)
+  assert.deepEqual(Model.packTakes({ a: { down: [slice] }, b: { down: [other], up: [take("sound.ogg", 100, 200)] } }), [slice, other])
+})
+
+test("normalizePack reads a thock config into object takes", () => {
+  const out = Model.normalizePack(JSON.stringify({ sounds: { default: { down: ["1.wav", 7], up: [] }, a: { down: ["2.wav"] } } }))
+  assert.equal(out.format, "thock")
+  assert.deepEqual(out.sounds.default, { down: [take("1.wav")], up: [] })
+  assert.deepEqual(out.sounds.a, { down: [take("2.wav")], up: [] })
+})
+
+test("normalizePack reads a mechvibes multi config", () => {
+  const out = Model.normalizePack(JSON.stringify({
+    key_define_type: "multi",
+    sound: "GENERIC_R{0-4}.mp3",
+    soundup: "release/GENERIC.mp3",
+    defines: {
+      "30": "a.wav",
+      "14": "del.wav",
+      "14-up": "del-up.wav",
+      "57416": "up.wav",
+      "3613": "ctrl.wav",
+      "79": "keypad1.wav",
+      "2": "one.wav",
+      "16": null,
+      "17": "../x.wav",
+      "18": "x..y.wav",
+      "999": "nowhere.wav"
+    }
+  }))
+  assert.equal(out.format, "mechvibes")
+  assert.deepEqual(out.sounds.default.down, [0, 1, 2, 3, 4].map(n => take("GENERIC_R" + n + ".mp3")))
+  assert.deepEqual(out.sounds.default.up, [take("release/GENERIC.mp3")])
+  assert.deepEqual(out.sounds.a, { down: [take("a.wav")], up: [] })
+  assert.deepEqual(out.sounds.backspace, { down: [take("del.wav")], up: [take("del-up.wav")] })
+  assert.deepEqual(out.sounds.arrUp.down, [take("up.wav")])
+  assert.deepEqual(out.sounds.ctrlLeft.down, [take("ctrl.wav")])
+  // Keypad 1 shares the main row's name and must not override it.
+  assert.deepEqual(out.sounds["1"].down, [take("one.wav")])
+  assert.equal(out.sounds.q, undefined)
+  assert.equal(out.sounds.w, undefined)
+  assert.equal(out.sounds.e, undefined)
+})
+
+test("normalizePack reads a mechvibes single sprite config", () => {
+  const out = Model.normalizePack(JSON.stringify({
+    key_define_type: "single",
+    sound: "sound.ogg",
+    defines: { "2": [2926, 125], "2-up": [3051, 77], "30": [100, 50], "31": "bad" }
+  }))
+  assert.equal(out.format, "mechvibes")
+  assert.deepEqual(out.sounds["1"], { down: [take("sound.ogg", 2926, 3051)], up: [take("sound.ogg", 3051, 3128)] })
+  assert.deepEqual(out.sounds.a.down, [take("sound.ogg", 100, 150)])
+  assert.deepEqual(out.sounds.default, { down: [take("sound.ogg", 100, 150)], up: [] })
+  assert.equal(out.sounds.s, undefined)
+})
+
+test("normalizePack reads MechvibesDX V2 single and multi configs", () => {
+  const single = Model.normalizePack(JSON.stringify({
+    config_version: "2",
+    definition_method: "single",
+    audio_file: "KEY.wav",
+    definitions: {
+      KeyA: { timing: [[23.0, 132.0], [132.0, 264.0]] },
+      Enter: { timing: [[500, 600]] },
+      ArrowUp: { timing: [[700, 800]] },
+      NumpadEnter: { timing: [[900, 1000]] },
+      Fn: { timing: [[0, 1]] }
+    }
+  }))
+  assert.equal(single.format, "mechvibesdx")
+  assert.deepEqual(single.sounds.a, { down: [take("KEY.wav", 23, 132)], up: [take("KEY.wav", 132, 264)] })
+  assert.deepEqual(single.sounds.enter, { down: [take("KEY.wav", 500, 600)], up: [] })
+  assert.deepEqual(single.sounds.arrUp.down, [take("KEY.wav", 700, 800)])
+  assert.deepEqual(single.sounds.default.down, [take("KEY.wav", 23, 132)])
+  assert.equal(Object.keys(single.sounds).length, 4)
+
+  const multi = Model.normalizePack(JSON.stringify({
+    config_version: "2",
+    definition_method: "multi",
+    definitions: {
+      Escape: { timing: [[0.0, 183.4]], audio_file: "ESC.wav" },
+      KeyB: { timing: [[0, 90]], audio_file: "KEY1.wav" }
+    }
+  }))
+  assert.equal(multi.format, "mechvibesdx")
+  assert.deepEqual(multi.sounds.esc.down, [take("ESC.wav", 0, 183.4)])
+  assert.deepEqual(multi.sounds.default.down, [take("ESC.wav", 0, 183.4)])
+})
+
+test("normalizePack yields nothing for garbage", () => {
+  assert.deepEqual(Model.normalizePack("not json"), { sounds: {}, format: "" })
+  assert.deepEqual(Model.normalizePack(JSON.stringify({ hello: 1 })), { sounds: {}, format: "" })
+  assert.deepEqual(Model.normalizePack(""), { sounds: {}, format: "" })
 })
 
 test("packLabel title-cases a slug without mangling acronyms", () => {

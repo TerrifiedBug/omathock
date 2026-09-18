@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.terrifiedbug.omathock",
   "name": "OmaThock",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "TerrifiedBug",
   "license": "MIT",
-  "description": "Mechanical keyboard sounds on every keypress. No input group, no daemon: Hyprland's Lua event bus feeds QtMultimedia inside the shell. Plays thock soundpacks.",
+  "description": "Mechanical keyboard sounds on every keypress. No input group, no binary, no installer: Hyprland's Lua event bus feeds a small Python mixer outside the shell. Plays thock, Mechvibes and MechvibesDX soundpacks unchanged.",
   "homepage": "https://github.com/TerrifiedBug/omathock",
   "kinds": ["bar-widget", "service"],
   "entryPoints": { "barWidget": "Panel.qml", "service": "Service.qml" },
@@ -18,7 +18,7 @@
     "defaults": { "enabled": true, "soundpack": "drop-holy-panda", "volume": 100 },
     "schema": [
       { "key": "enabled", "type": "boolean", "label": "Keyboard sounds", "defaultValue": true },
-      { "key": "soundpack", "type": "string", "label": "Soundpack", "description": "Directory name under soundpacks/ (bundled) or ~/.local/share/omathock/soundpacks/", "defaultValue": "drop-holy-panda" },
+      { "key": "soundpack", "type": "string", "label": "Soundpack", "description": "Directory name under soundpacks/ (bundled) or ~/.local/share/omathock/soundpacks/. thock, Mechvibes and MechvibesDX packs all work.", "defaultValue": "drop-holy-panda" },
       { "key": "volume", "type": "integer", "label": "Volume", "min": 0, "max": 100, "step": 5, "defaultValue": 100 }
     ]
   }

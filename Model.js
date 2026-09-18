@@ -1,10 +1,11 @@
 // Pure helpers for OmaThock. Qt-free so node can test them
-// (test/model.test.js); Service.qml owns the hook, the audio and the settings.
+// (test/model.test.js); Service.qml owns the hook, the player and the settings.
 //
 // Key names are thock's, not Linux's: the soundpacks are thock/mechvibes packs
 // keyed by macOS-flavoured names ("optionLeft", "capsLock", "arrUp"), so the
 // evdev code coming off Hyprland's Lua bus is translated into that vocabulary
-// rather than the packs being rewritten.
+// rather than the packs being rewritten. Mechvibes and MechvibesDX packs are
+// normalised into that same shape on load (normalizePack).
 
 var DEFAULTS = { enabled: true, soundpack: "drop-holy-panda", volume: 100 }
 
@@ -139,10 +140,16 @@ function hasPending(state) {
   return Object.keys(state.pending).length > 0
 }
 
-// Every WAV a pack can play for a key press/release, in pack order. Falls
+// A take is one playable slice: { file, start, end } with the file relative
+// to the pack directory and start/end in milliseconds; end 0 means end of
+// file. Its key is the identity the player caches by and packTakes dedupes by.
+function takeKey(take) {
+  return take.file + "@" + take.start + "-" + take.end
+}
+
+// Every take a pack can play for a key press/release, in pack order. Falls
 // through key -> alias -> "default"; a direction the pack does not record
-// (most have no key-up) yields [] — play nothing. The caller picks the take:
-// Service.play prefers one that is not still ringing.
+// (most have no key-up) yields [] — play nothing. The caller picks the take.
 function takesFor(sounds, name, up) {
   var pack = sounds || {}
   var entry = pack[name] || pack[KEY_ALIASES[name]] || pack.default
@@ -155,9 +162,9 @@ function takesFor(sounds, name, up) {
   return list
 }
 
-// Every distinct WAV a pack can play, sorted — the model for the SoundEffect
-// pool, so each file is decoded once and played from memory.
-function packFiles(sounds) {
+// Every distinct take a pack can play, sorted by key: what the player decodes
+// on load, so a keystroke is a lookup and never a file read.
+function packTakes(sounds) {
   var seen = {}
   var out = []
   var keys = Object.keys(sounds || {})
@@ -169,23 +176,194 @@ function packFiles(sounds) {
       var list = lists[l]
       if (!list || list.length === undefined) continue
       for (var j = 0; j < list.length; j++) {
-        var file = list[j]
-        if (typeof file !== "string" || file === "" || seen[file]) continue
-        seen[file] = true
-        out.push(file)
+        var take = list[j]
+        if (!take || typeof take.file !== "string") continue
+        var key = takeKey(take)
+        if (seen[key]) continue
+        seen[key] = true
+        out.push(take)
       }
     }
   }
-  return out.sort()
+  return out.sort(function(a, b) { var ka = takeKey(a), kb = takeKey(b); return ka < kb ? -1 : ka > kb ? 1 : 0 })
 }
 
-// Whether two file lists hold the same names in the same order. The pool is
-// an Instantiator over the list, so handing it a fresh array with identical
-// contents destroys and reloads every SoundEffect for nothing.
-function sameList(a, b) {
-  if (!a || !b || a.length !== b.length) return false
-  for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
+// A pack file name is played from the pack directory and nowhere else:
+// subdirectories are fine ("release/ENTER.mp3"), anything with ".." in it or
+// an absolute path is not.
+function safeFile(name) {
+  return typeof name === "string" && name !== "" && name.charAt(0) !== "/" && name.indexOf("..") === -1
+}
+
+function wholeFile(name) {
+  return { file: name, start: 0, end: 0 }
+}
+
+// Mechvibes names a family of variants as "GENERIC_R{0-4}.mp3", one file per
+// number. Anything else is one whole file; an unsafe or empty name is nothing.
+function expandFiles(name) {
+  if (!safeFile(name)) return []
+  var m = /^(.*)\{(\d+)-(\d+)\}(.*)$/.exec(name)
+  if (!m) return [wholeFile(name)]
+  var from = Number(m[2]), to = Number(m[3])
+  if (to < from) return [wholeFile(name)]
+  var out = []
+  for (var n = from; n <= to; n++) out.push(wholeFile(m[1] + n + m[4]))
+  return out
+}
+
+// Mechvibes keycodes come from iohook: a main-row key is its set-1 scancode,
+// which is also its evdev code, and an extended (E0-prefixed) key arrives as
+// 0xE00, 0xE000 or 0xEE00 OR-ed with the scancode. The low byte is the
+// scancode in every variant; this is its evdev code.
+var MECHVIBES_EXTENDED = {
+  0x1C: 96, 0x1D: 97, 0x35: 98, 0x38: 100, 0x45: 69,
+  0x47: 102, 0x48: 103, 0x49: 104, 0x4B: 105, 0x4D: 106,
+  0x4F: 107, 0x50: 108, 0x51: 109, 0x52: 110, 0x53: 111,
+  0x5B: 125, 0x5C: 126, 0x5D: 127
+}
+
+function mechvibesEvdev(code) {
+  if (code <= 255) return code
+  var mapped = MECHVIBES_EXTENDED[code & 0xFF]
+  return mapped === undefined ? -1 : mapped
+}
+
+// UI Events `code` name (MechvibesDX V2 keys) -> evdev code, for every key
+// KEY_NAMES knows. Source: https://www.w3.org/TR/uievents-code/ and
+// linux/input-event-codes.h.
+var W3C_CODES = {
+  Escape: 1,
+  Digit1: 2, Digit2: 3, Digit3: 4, Digit4: 5, Digit5: 6, Digit6: 7, Digit7: 8, Digit8: 9, Digit9: 10, Digit0: 11,
+  Minus: 12, Equal: 13, Backspace: 14, Tab: 15,
+  KeyQ: 16, KeyW: 17, KeyE: 18, KeyR: 19, KeyT: 20, KeyY: 21, KeyU: 22, KeyI: 23, KeyO: 24, KeyP: 25,
+  BracketLeft: 26, BracketRight: 27, Enter: 28, ControlLeft: 29,
+  KeyA: 30, KeyS: 31, KeyD: 32, KeyF: 33, KeyG: 34, KeyH: 35, KeyJ: 36, KeyK: 37, KeyL: 38,
+  Semicolon: 39, Quote: 40, Backquote: 41, ShiftLeft: 42, Backslash: 43,
+  KeyZ: 44, KeyX: 45, KeyC: 46, KeyV: 47, KeyB: 48, KeyN: 49, KeyM: 50,
+  Comma: 51, Period: 52, Slash: 53, ShiftRight: 54, NumpadMultiply: 55, AltLeft: 56, Space: 57, CapsLock: 58,
+  F1: 59, F2: 60, F3: 61, F4: 62, F5: 63, F6: 64, F7: 65, F8: 66, F9: 67, F10: 68,
+  NumLock: 69,
+  Numpad7: 71, Numpad8: 72, Numpad9: 73, NumpadSubtract: 74, Numpad4: 75, Numpad5: 76, Numpad6: 77, NumpadAdd: 78,
+  Numpad1: 79, Numpad2: 80, Numpad3: 81, Numpad0: 82, NumpadDecimal: 83,
+  F11: 87, F12: 88,
+  NumpadEnter: 96, ControlRight: 97, NumpadDivide: 98, AltRight: 100,
+  Home: 102, ArrowUp: 103, PageUp: 104, ArrowLeft: 105, ArrowRight: 106,
+  End: 107, ArrowDown: 108, PageDown: 109,
+  Insert: 110, Delete: 111,
+  MetaLeft: 125, MetaRight: 126
+}
+
+// Adds takes for a key name and direction unless that direction already has
+// some: keys are visited in ascending evdev order, so the main row's sound
+// wins over the keypad's when both map to one thock name.
+function addTakes(sounds, name, up, takes) {
+  if (takes.length === 0) return
+  var entry = sounds[name] || (sounds[name] = { down: [], up: [] })
+  var dir = up ? "up" : "down"
+  if (entry[dir].length === 0) entry[dir] = takes
+}
+
+// The default is what every unnamed key plays. Mechvibes packs have no such
+// entry, so "a" stands in, and failing that whatever was mapped first.
+function defaultFrom(sounds, order) {
+  var a = sounds[KEY_NAMES[30]]
+  if (a && a.down.length > 0) return a.down
+  for (var i = 0; i < order.length; i++) {
+    var entry = sounds[order[i]]
+    if (entry && entry.down.length > 0) return entry.down
+  }
+  return []
+}
+
+function thockSounds(config) {
+  var sounds = {}
+  var names = Object.keys(config.sounds)
+  for (var i = 0; i < names.length; i++) {
+    var raw = config.sounds[names[i]]
+    if (!raw || typeof raw !== "object") continue
+    var entry = { down: [], up: [] }
+    var dirs = ["down", "up"]
+    for (var d = 0; d < dirs.length; d++) {
+      var list = raw[dirs[d]]
+      if (!list || list.length === undefined) continue
+      for (var j = 0; j < list.length; j++) if (safeFile(list[j])) entry[dirs[d]].push(wholeFile(list[j]))
+    }
+    sounds[names[i]] = entry
+  }
+  return sounds
+}
+
+// Mechvibes v1: defines keyed "<code>" (press) and "<code>-up" (release).
+// "multi" values are file names, "single" values are [start_ms, duration_ms]
+// into one sprite file, config.sound.
+function mechvibesSounds(config) {
+  var single = config.key_define_type === "single"
+  var sprite = safeFile(config.sound) ? config.sound : ""
+  var keys = Object.keys(config.defines).map(function(k) {
+    var m = /^(\d+)(-up)?$/.exec(k)
+    return m ? { key: k, code: Number(m[1]), up: m[2] !== undefined } : null
+  }).filter(function(k) { return k !== null }).sort(function(a, b) { return a.code - b.code || (a.up ? 1 : 0) - (b.up ? 1 : 0) })
+  var sounds = {}
+  var order = []
+  for (var i = 0; i < keys.length; i++) {
+    var name = KEY_NAMES[mechvibesEvdev(keys[i].code)]
+    if (name === undefined) continue
+    var value = config.defines[keys[i].key]
+    var takes
+    if (single) {
+      if (sprite === "" || !value || value.length !== 2 || !isFinite(value[0]) || !isFinite(value[1])) continue
+      takes = [{ file: sprite, start: Number(value[0]), end: Number(value[0]) + Number(value[1]) }]
+    } else {
+      takes = expandFiles(value)
+    }
+    if (!sounds[name]) order.push(name)
+    addTakes(sounds, name, keys[i].up, takes)
+  }
+  var down = single ? [] : expandFiles(config.sound)
+  sounds.default = { down: down.length > 0 ? down : defaultFrom(sounds, order), up: expandFiles(config.soundup) }
+  return sounds
+}
+
+// MechvibesDX V2: definitions keyed by UI Events code name, each with
+// timing [[down_start, down_end], [up_start, up_end]?] in ms into either the
+// top-level audio_file ("single") or its own ("multi").
+function mechvibesDxSounds(config) {
+  var single = config.definition_method !== "multi"
+  var sprite = safeFile(config.audio_file) ? config.audio_file : ""
+  var names = Object.keys(config.definitions).filter(function(n) { return W3C_CODES[n] !== undefined })
+    .sort(function(a, b) { return W3C_CODES[a] - W3C_CODES[b] })
+  var sounds = {}
+  var order = []
+  for (var i = 0; i < names.length; i++) {
+    var name = KEY_NAMES[W3C_CODES[names[i]]]
+    var def = config.definitions[names[i]]
+    if (name === undefined || !def || typeof def !== "object") continue
+    var file = single ? sprite : (safeFile(def.audio_file) ? def.audio_file : "")
+    var timing = def.timing
+    if (file === "" || !timing || timing.length === undefined) continue
+    if (!sounds[name]) order.push(name)
+    for (var d = 0; d < 2 && d < timing.length; d++) {
+      var span = timing[d]
+      if (!span || span.length !== 2 || !isFinite(span[0]) || !isFinite(span[1])) continue
+      addTakes(sounds, name, d === 1, [{ file: file, start: Number(span[0]), end: Number(span[1]) }])
+    }
+  }
+  sounds.default = { down: defaultFrom(sounds, order), up: [] }
+  return sounds
+}
+
+// config.json text -> { sounds, format }, sounds in the thock shape
+// { "<name>": { down: [take], up: [take] }, default: {...} } whatever the
+// pack's own format was. Unparseable or unrecognised -> { sounds: {}, format: "" }.
+function normalizePack(configText) {
+  var config
+  try { config = JSON.parse(configText || "") } catch (e) { return { sounds: {}, format: "" } }
+  if (!config || typeof config !== "object") return { sounds: {}, format: "" }
+  if (config.sounds && typeof config.sounds === "object") return { sounds: thockSounds(config), format: "thock" }
+  if (config.defines && typeof config.defines === "object") return { sounds: mechvibesSounds(config), format: "mechvibes" }
+  if (config.definitions && typeof config.definitions === "object" && String(config.config_version) === "2") return { sounds: mechvibesDxSounds(config), format: "mechvibesdx" }
+  return { sounds: {}, format: "" }
 }
 
 // Directory name is the pack's identity, so it is also its label:
@@ -265,8 +443,11 @@ if (typeof module !== "undefined") {
     dueReleases: dueReleases,
     hasPending: hasPending,
     takesFor: takesFor,
-    packFiles: packFiles,
-    sameList: sameList,
+    takeKey: takeKey,
+    packTakes: packTakes,
+    normalizePack: normalizePack,
+    MECHVIBES_EXTENDED: MECHVIBES_EXTENDED,
+    W3C_CODES: W3C_CODES,
     packLabel: packLabel,
     parsePacks: parsePacks,
     dirFromUrl: dirFromUrl,

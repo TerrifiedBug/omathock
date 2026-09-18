@@ -35,10 +35,15 @@ Panel {
     return { value: slug, label: Model.packLabel(slug) }
   })
 
+  readonly property string playerState: service ? service.playerState : String(ipcState.player || "")
+  readonly property string playerProblem: service ? service.playerProblem : String(ipcState.playerProblem || "")
+
   // One line of why nothing is clicking, rather than a dead panel.
   readonly property string problem:
     !service && !ipcStatusKnown ? (ipcProblem || "Connecting to OmaThock…")
     : !luaReady ? "Needs Hyprland's Lua config (hyprland.lua)"
+    : playerProblem !== "" ? playerProblem
+    : playerState === "starting" ? "Starting sound player…"
     : packOptions.length === 0 ? "No soundpacks found"
     : ""
 
