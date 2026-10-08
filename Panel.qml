@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -47,7 +48,7 @@ Panel {
     : packOptions.length === 0 ? "No soundpacks found"
     : ""
 
-  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   // A direct-panel bar widget is sized by its own content: without this the
@@ -265,7 +266,7 @@ Panel {
           visible: root.problem !== ""
           width: parent.width
           text: root.problem
-          color: root.bar ? root.bar.urgent : Color.urgent
+          color: root.bar ? root.bar.urgent : Commons.Color.urgent
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap

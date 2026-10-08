@@ -227,6 +227,12 @@ Qt-free: `node --test test/`. The player has its own tests, which fake
 libpulse: `python3 -m unittest discover -s test -p 'test_*.py'`. Set
 `OMATHOCK_TEST_AUDIO=1` to add one real run against PipeWire.
 
+## Theme compatibility
+
+Theme colors use a namespaced `qs.Commons.Color` import to avoid Qt 6.12's
+`Color` name collision. This keeps the existing palette roles and fallbacks
+without changing the plugin's Omarchy requirements.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed recordings
