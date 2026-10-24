@@ -345,7 +345,6 @@ class Mixer:
     def _fail(self, error):
         self._close_stream()
         self.voices.clear()
-        self.prewarm = False
         self.last_fail = time.monotonic()
         self.emit({"evt": "error", "msg": str(error)})
         self.cond.notify_all()
@@ -354,6 +353,8 @@ class Mixer:
         try:
             self.stream = Stream(self.lib, self.rate)
         except PulseError as e:
+            # Only the warmup attempt itself may cancel a pending load.
+            self.prewarm = False
             self._fail(e)
             return False
         self.prewarm = False

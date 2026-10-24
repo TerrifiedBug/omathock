@@ -12,8 +12,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+from unittest import mock
 import wave
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -196,6 +198,68 @@ class MixerTests(unittest.TestCase):
             mixer.stop()
             mixer.thread.join(1)
         self.assertFalse(mixer.thread.is_alive())
+
+    def test_old_write_failure_preserves_new_pack_warmup(self):
+        directory = tempfile.mkdtemp(prefix="omathock-reload-")
+        self.addCleanup(shutil.rmtree, directory)
+        write_wav(os.path.join(directory, "old.wav"), 44100, 2, 441)
+        write_wav(os.path.join(directory, "new.wav"), 48000, 2, 480, value=2000)
+        write_started = threading.Event()
+        fail_write = threading.Event()
+        load_waiting = threading.Event()
+        played = threading.Event()
+        loader = None
+
+        class InterruptedPulse(FakePulse):
+            def pa_simple_write(self, handle, data, size, err):
+                if not write_started.is_set():
+                    write_started.set()
+                    fail_write.wait(3)
+                    return -1
+                result = super().pa_simple_write(handle, data, size, err)
+                played.set()
+                return result
+
+        # Control the thread interleaving at the condition-variable boundary.
+        class ReloadCondition(threading.Condition):
+            def wait(self, timeout=None):
+                if threading.current_thread() is loader:
+                    load_waiting.set()
+                return super().wait(timeout)
+
+        lib = InterruptedPulse()
+        with mock.patch.object(player.threading, "Condition", ReloadCondition):
+            mixer = player.Mixer(lib, self.events.append)
+        mixer.start()
+        try:
+            self.assertEqual(mixer.load(directory, [take("old.wav")], 100), (1, []))
+            mixer.play(take("old.wav"))
+            self.assertTrue(write_started.wait(1))
+            loaded = []
+            loader = threading.Thread(
+                target=lambda: loaded.append(mixer.load(directory, [take("new.wav")], 100)),
+                daemon=True,
+            )
+            loader.start()
+            self.assertTrue(load_waiting.wait(1))
+            fail_write.set()
+            loader.join(1)
+            self.assertFalse(loader.is_alive())
+            self.assertEqual(loaded, [(1, [])])
+            self.assertEqual(lib.opens, 2)
+            self.assertEqual(lib.streams, 1)
+            self.assertEqual(self.events, [{"evt": "error", "msg": "pulse: fake"}])
+            self.assertTrue(mixer.play(take("new.wav")))
+            self.assertTrue(played.wait(1))
+            self.assertEqual(lib.written[0], array.array("h", [2000] * 960).tobytes())
+        finally:
+            fail_write.set()
+            mixer.stop()
+            mixer.thread.join(1)
+            if loader is not None:
+                loader.join(1)
+        self.assertFalse(mixer.thread.is_alive())
+        self.assertEqual(lib.streams, 0)
 
 
 class ProtocolTests(unittest.TestCase):

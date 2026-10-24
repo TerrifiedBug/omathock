@@ -160,6 +160,10 @@ restarts it if it dies or stops answering; after five failures in thirty
 seconds the panel says "Sound player failed" with the reason, and reopening the
 panel or `omarchy-shell omathock refresh` tries again.
 
+When a pack needs a replacement audio stream, loading waits for its open
+attempt to finish. A failed write from the previous stream leaves that
+warmup request intact, so the new stream still gets its open attempt.
+
 Holding a key gives one sound. That takes some care, because a held key looks
 different on every setup: nothing at all until release on a plain keyboard, a
 flood of releases from `wtype`, or press/release pairs at the repeat rate when an
