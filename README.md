@@ -95,6 +95,11 @@ and packaged the same way:
 `cherry-mx-brown-pbt` · `cherry-mx-red` · `everglide-crystal-purple` ·
 `everglide-oreo`
 
+Also bundled is `softnote`, a synthesized pack by Ganesh Gunasegaran for
+laptop typing: one short note for every key, struck heavier for Space and
+Enter and muted for Backspace. See
+[its design notes](soundpacks/softnote/README.md).
+
 Add your own from thock's collection, from
 [mechvibes.com](https://mechvibes.com), or from a MechvibesDX pack. Any of
 the three formats works as a folder holding its `config.json` and its audio,
@@ -236,4 +241,5 @@ without changing the plugin's Omarchy requirements.
 ## License
 
 MIT, see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed recordings
-by Thomas Lai and by mechvibes; see [NOTICE](NOTICE).
+by Thomas Lai and by mechvibes, and Softnote, synthesized by Ganesh
+Gunasegaran; see [NOTICE](NOTICE).

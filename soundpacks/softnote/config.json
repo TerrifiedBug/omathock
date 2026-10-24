@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "name": "Softnote",
+    "brand": "Original",
+    "author": "Ganesh Gunasegaran",
+    "supportsKeyUp": false,
+    "category": "keyboard"
+  },
+  "license": {
+    "type": "MIT"
+  },
+  "sounds": {
+    "default": {
+      "down": [
+        "1.wav",
+        "2.wav",
+        "3.wav",
+        "4.wav",
+        "5.wav",
+        "6.wav",
+        "7.wav",
+        "8.wav"
+      ],
+      "up": []
+    },
+    "space": {
+      "down": [
+        "201.wav",
+        "202.wav",
+        "203.wav"
+      ],
+      "up": []
+    },
+    "enter": {
+      "down": [
+        "301.wav",
+        "302.wav"
+      ],
+      "up": []
+    },
+    "backspace": {
+      "down": [
+        "401.wav",
+        "402.wav",
+        "403.wav"
+      ],
+      "up": []
+    }
+  },
+  "id": "0b38c794-22e0-4ad8-8b74-93d07c95d9ce"
+}
