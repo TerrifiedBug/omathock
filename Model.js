@@ -388,6 +388,40 @@ function packLabel(slug) {
   }).join(" ")
 }
 
+// Only known slug prefixes form brands; a similar-looking user pack remains
+// independent. A brand with one installed pack is just a selectable leaf.
+function packGroups(slugs) {
+  var brands = {}
+  var rows = []
+  var seen = Object.create(null)
+  for (var i = 0; i < slugs.length; i++) {
+    var slug = slugs[i]
+    if (seen[slug]) continue
+    seen[slug] = true
+    var label = packLabel(slug)
+    var match = /^(cherry[-_]?mx|everglide|gateron|klack|topre)(?:[-_](.+))?$/i.exec(slug)
+    var leaf = { slug: slug, label: label }
+    if (!match) {
+      rows.push(leaf)
+      continue
+    }
+    var brand = packLabel(match[1])
+    if (!brands[brand]) brands[brand] = []
+    brands[brand].push({ slug: slug, label: match[2] ? label.slice(brand.length + 1) : "Original" })
+  }
+  Object.keys(brands).forEach(function(brand) {
+    var leaves = brands[brand].sort(comparePackLabels)
+    rows.push(leaves.length === 1
+      ? { slug: leaves[0].slug, label: packLabel(leaves[0].slug) }
+      : { brand: brand, label: brand, packs: leaves })
+  })
+  return rows.sort(comparePackLabels)
+}
+
+function comparePackLabels(a, b) {
+  return a.label.localeCompare(b.label) || String(a.slug || "").localeCompare(String(b.slug || ""))
+}
+
 // `find <bundled> <user> -mindepth 2 -maxdepth 2 -name config.json` output ->
 // [{ slug, dir }]. find walks roots in argument order and the user root is
 // second, so a same-named user pack overrides the bundled one.
@@ -463,6 +497,7 @@ if (typeof module !== "undefined") {
     MECHVIBES_EXTENDED: MECHVIBES_EXTENDED,
     W3C_CODES: W3C_CODES,
     packLabel: packLabel,
+    packGroups: packGroups,
     parsePacks: parsePacks,
     dirFromUrl: dirFromUrl,
     findEntry: findEntry,

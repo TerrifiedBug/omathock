@@ -48,12 +48,21 @@ widget. Omarchy scopes direct service access to the hosting plugin in that
 case, so OmaThock falls back to its public IPC target and mirrors the service
 state asynchronously.
 
-| Control    | Does                                                      |
-| ---------- | --------------------------------------------------------- |
-| Toggle     | Turns the key hook on and off; off removes it from Hyprland |
-| Soundpack  | Every pack found on disk; picking one plays a sample click |
-| Volume     | 0–100; releasing the slider plays a sample click          |
-| `Esc`      | Closes the panel                                          |
+| Control | Does |
+| ------- | ---- |
+| Toggle | Turns the key hook on and off; off removes it from Hyprland |
+| Soundpacks | Groups brands with multiple packs; selecting a pack keeps the list open and plays an audition |
+| All soundpacks | Returns from a brand to the previous position in the main list |
+| Preview | Replays the current pack without changing the selection |
+| Volume | 0–100; releasing the slider auditions the new level |
+| `↑` / `↓`, `Enter` | Moves through the controls and selects the current row |
+| `←` / `Esc` | Returns from a brand; `Esc` from the main list closes the panel |
+
+Each audition plays three letters, Space and Enter over about 0.7 seconds,
+including releases when the pack records them. It waits for the selected pack
+to load. Another selection or volume audition replaces the previous one.
+Closing the panel stops the audition without cutting off normal typing sounds.
+Muting or locking also cancels it.
 
 The panel is also a summonable surface:
 
@@ -131,6 +140,9 @@ omarchy-shell omathock toggle
 omarchy-shell omathock soundpack kailh-box-navy  # "unknown" if no such pack
 omarchy-shell omathock volume 30
 omarchy-shell omathock refresh                   # rescan the soundpack directories
+omarchy-shell omathock preview                   # replay the current pack
+omarchy-shell omathock previewVolume 30          # set volume and audition it
+omarchy-shell omathock cancelPreview             # stop the audition only
 ```
 
 ## How it works

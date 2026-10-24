@@ -148,6 +148,19 @@ class MixerTests(unittest.TestCase):
         self.assertFalse(self.mixer.play(take("nope")))
         self.assertTrue(self.mixer.play(take("quiet")))
 
+    def test_cancel_preview_keeps_real_typing_audio(self):
+        commands = [
+            {"cmd": "play", "take": take("quiet")},
+            {"cmd": "play", "take": take("loud"), "preview": True},
+            {"cmd": "cancelPreview"},
+            {"cmd": "cancelPreview"},
+        ]
+        player.serve([json.dumps(command) for command in commands], self.mixer, self.events.append)
+        out = self.chunk()
+        self.assertEqual(out[:len(self.quiet)], self.quiet)
+        self.assertEqual(out[len(self.quiet):], array.array("h", [0] * (len(out) - len(self.quiet))))
+        self.assertEqual(self.mixer.mix(), self.mixer.silence)
+
     def test_load_warms_stream_and_rate_change_reopens_before_playback(self):
         directory = tempfile.mkdtemp(prefix="omathock-warm-")
         self.addCleanup(shutil.rmtree, directory)

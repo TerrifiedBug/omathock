@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import "Model.js" as Model
+import "Audition.js" as Audition
 
 // The whole plugin, minus its UI: one Lua hook, one soundpack, one player.
 //
@@ -74,9 +75,20 @@ Item {
   // rules live in Model.pressKey / releaseKey / dueReleases.
   property var keys: Model.keyState()
 
-  // Armed by setSoundpack; the click fires once the player reports the
-  // picked pack loaded.
-  property bool sampleOnLoad: false
+  property string soundsDir: ""
+  property var auditionCallback: null
+  property var audition: Audition.create({
+    schedule: function(callback, delay) {
+      root.auditionCallback = callback
+      auditionTimer.interval = delay
+      auditionTimer.restart()
+      return function() { auditionTimer.stop(); root.auditionCallback = null }
+    },
+    allowed: function() { return root.soundEnabled && root.lockKnown && !root.locked },
+    takesFor: Model.takesFor,
+    play: function(take) { root.send({ cmd: "play", take: take, preview: true }) },
+    cancel: function() { root.send({ cmd: "cancelPreview" }) }
+  })
 
   readonly property string manifestId: manifest && manifest.id ? manifest.id : "io.github.terrifiedbug.omathock"
 
@@ -108,13 +120,15 @@ Item {
   }
 
   function sendLoad() {
-    if (root.pack) send({ cmd: "load", dir: root.pack.dir, takes: Model.packTakes(root.sounds), volume: root.volume })
+    if (!pack || soundsDir !== pack.dir || !playerReady) return
+    var request = audition.beginLoad(pack.dir, sounds)
+    send({ cmd: "load", dir: pack.dir, takes: Model.packTakes(sounds), volume: volume, request: request })
   }
 
   // The mixer overlaps the same sample freely, so a random take is enough:
   // nothing here needs to avoid a take that is still ringing.
   function play(name, up) {
-    if (!lockKnown || locked) return
+    if (!soundEnabled || !lockKnown || locked || !playerReady || !pack || soundsDir !== pack.dir) return
     var takes = Model.takesFor(sounds, name, up)
     if (takes.length === 0) return
     send({ cmd: "play", take: takes[Math.floor(Math.random() * takes.length)] })
@@ -143,7 +157,7 @@ Item {
       sendLoad()
       send({ cmd: "volume", value: volume })
     } else if (msg.evt === "loaded") {
-      if (sampleOnLoad) { sampleOnLoad = false; play("default", false) }
+      audition.loaded(msg)
       if (msg.failed && msg.failed.length > 0) console.warn("omathock: " + msg.failed.length + " takes failed:", msg.failed.join("; "))
     } else if (msg.evt === "error") {
       console.warn("omathock: player:", msg.msg)
@@ -174,11 +188,34 @@ Item {
 
   function setSoundpack(slug) {
     if (slug === soundpack) return
-    for (var i = 0; i < packs.length; i++) if (packs[i].slug === slug) { sampleOnLoad = true; persist({ soundpack: slug }); return }
+    for (var i = 0; i < packs.length; i++) {
+      if (packs[i].slug !== slug) continue
+      audition.select(packs[i].dir)
+      soundsDir = ""
+      sounds = ({})
+      persist({ soundpack: slug })
+      preview()
+      return
+    }
   }
 
   function setVolume(percent) {
+    cancelPreview()
     persist({ volume: Model.normalizeVolume(percent) })
+  }
+
+  function preview() {
+    audition.select(pack ? pack.dir : "")
+    audition.request()
+  }
+
+  function previewVolume(percent) {
+    setVolume(percent)
+    preview()
+  }
+
+  function cancelPreview() {
+    audition.cancel()
   }
 
   // Rescan the pack directories; also the retry for the player, since the
@@ -220,13 +257,25 @@ Item {
     restartPlayer()
   }
 
-  onVolumeChanged: send({ cmd: "volume", value: volume })
+  onPackChanged: {
+    audition.select(pack ? pack.dir : "")
+    if (!pack || soundsDir !== pack.dir) { soundsDir = ""; sounds = ({}) }
+  }
+
+  onLockKnownChanged: if (!lockKnown) cancelPreview()
+  onLockedChanged: if (locked) cancelPreview()
+
+  onVolumeChanged: {
+    cancelPreview()
+    send({ cmd: "volume", value: volume })
+  }
 
   // Unload (disable, remove, hot reload) must take the hook with it, and the
   // component is already going away, so this cannot be a tracked Process.
   // The player's stdin closes with this object, which is its cue to exit;
   // stopping it here is only the backstop.
   Component.onDestruction: {
+    cancelPreview()
     player.running = false
     if (luaReady) Quickshell.execDetached(["hyprctl", "repl", Model.LUA_UNREGISTER])
   }
@@ -252,13 +301,19 @@ Item {
     onFileChanged: reload()
 
     onLoaded: {
+      if (!root.pack || path !== root.pack.dir + "/config.json") return
       var pack = Model.normalizePack(text())
       if (pack.format === "") console.warn("omathock: unreadable soundpack config:", path)
       root.sounds = pack.sounds
+      root.soundsDir = root.pack.dir
       root.sendLoad()
     }
 
-    onPathChanged: if (path === "") { root.sampleOnLoad = false; root.sounds = ({}) }
+    onPathChanged: {
+      root.soundsDir = ""
+      root.sounds = ({})
+      root.audition.select(root.pack ? root.pack.dir : "")
+    }
   }
 
   // A missing user root makes find exit 1 after listing the bundled root;
@@ -315,12 +370,24 @@ Item {
     // python3, no libpulse, unreadable file): stop and say so rather than
     // spin. A helper that stays up thirty seconds resets the count.
     onExited: function(exitCode) {
+      root.audition.reset()
       root.playerReady = false
       root.playerWanted = false
       playerStable.stop()
       if (!root.soundEnabled) return
       if (root.playerAttempts >= 5) { root.playerFailed = true; return }
       playerRestart.restart()
+    }
+  }
+
+  Timer {
+    id: auditionTimer
+    repeat: false
+
+    onTriggered: {
+      var callback = root.auditionCallback
+      root.auditionCallback = null
+      if (callback) callback()
     }
   }
 
@@ -478,9 +545,18 @@ Item {
       return "ok"
     }
 
+    function preview(): string {
+      root.preview()
+      return "ok"
+    }
+
     function previewVolume(percent: int): string {
-      root.setVolume(percent)
-      root.play("default", false)
+      root.previewVolume(percent)
+      return "ok"
+    }
+
+    function cancelPreview(): string {
+      root.cancelPreview()
       return "ok"
     }
   }
