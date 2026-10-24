@@ -40,9 +40,11 @@ class FakePulse:
     def __init__(self):
         self.written = []
         self.streams = 0
+        self.opens = 0
 
     def pa_simple_new(self, *args):
         self.streams += 1
+        self.opens += 1
         return 1
 
     def pa_simple_write(self, handle, data, size, err):
@@ -54,6 +56,12 @@ class FakePulse:
 
     def pa_strerror(self, code):
         return b"fake"
+
+
+class FailedPulse(FakePulse):
+    def pa_simple_new(self, *args):
+        self.opens += 1
+        raise player.PulseError("fake open failure")
 
 
 class PackTests(unittest.TestCase):
@@ -137,6 +145,57 @@ class MixerTests(unittest.TestCase):
     def test_unknown_take_is_refused(self):
         self.assertFalse(self.mixer.play(take("nope")))
         self.assertTrue(self.mixer.play(take("quiet")))
+
+    def test_load_warms_stream_and_rate_change_reopens_before_playback(self):
+        directory = tempfile.mkdtemp(prefix="omathock-warm-")
+        self.addCleanup(shutil.rmtree, directory)
+        write_wav(os.path.join(directory, "q.wav"), 44100, 2, 4410)
+        write_wav(os.path.join(directory, "r.wav"), 48000, 2, 480)
+        self.mixer.start()
+        try:
+            count, failed = self.mixer.load(directory, [take("q.wav")], 100)
+            self.assertEqual((count, failed), (1, []))
+            self.assertEqual(self.lib.opens, 1)
+            self.assertEqual(self.lib.streams, 1)
+            self.assertEqual(self.lib.written, [])
+
+            count, failed = self.mixer.load(directory, [take("r.wav")], 100)
+            self.assertEqual((count, failed), (1, []))
+            self.assertEqual(self.mixer.rate, 48000)
+            self.assertEqual(self.lib.opens, 2)
+            self.assertEqual(self.lib.streams, 1)
+            self.assertEqual(self.lib.written, [])
+
+            self.assertTrue(self.mixer.play(take("r.wav")))
+            deadline = time.monotonic() + 1
+            while not self.lib.written and time.monotonic() < deadline:
+                time.sleep(0.005)
+            self.assertTrue(self.lib.written)
+            self.assertEqual(self.lib.opens, 2)
+        finally:
+            self.mixer.stop()
+            self.mixer.thread.join(1)
+        self.assertFalse(self.mixer.thread.is_alive())
+        self.assertEqual(self.lib.streams, 0)
+
+    def test_stream_warm_failure_does_not_hold_load_open(self):
+        directory = tempfile.mkdtemp(prefix="omathock-fail-")
+        self.addCleanup(shutil.rmtree, directory)
+        write_wav(os.path.join(directory, "q.wav"), 44100, 2, 4410)
+        lib = FailedPulse()
+        events = []
+        mixer = player.Mixer(lib, events.append)
+        mixer.start()
+        try:
+            count, failed = mixer.load(directory, [take("q.wav")], 100)
+            self.assertEqual((count, failed), (1, []))
+            self.assertEqual(lib.opens, 1)
+            self.assertEqual(lib.streams, 0)
+            self.assertEqual(events, [{"evt": "error", "msg": "fake open failure"}])
+        finally:
+            mixer.stop()
+            mixer.thread.join(1)
+        self.assertFalse(mixer.thread.is_alive())
 
 
 class ProtocolTests(unittest.TestCase):

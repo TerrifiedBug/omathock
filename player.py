@@ -32,7 +32,6 @@ from operator import add, mul
 
 CHUNK_MS = 10
 MAX_VOICES = 16
-IDLE_FREE_S = 30
 TICK_S = 2
 RETRY_S = 1
 DEFAULT_RATE = 48000
@@ -238,8 +237,8 @@ class Voice:
 
 class Mixer:
     """Voices summed into 10 ms chunks on its own thread; every public method
-    is safe to call from the stdin thread. The stream is only ever touched by
-    the mixer thread, so nothing can free it under a write."""
+    is safe to call from the stdin thread. The stream is warmed when a bank is
+    loaded and stays on the mixer thread, so keypresses avoid stream setup."""
 
     def __init__(self, lib, emit):
         self.lib = lib
@@ -251,7 +250,7 @@ class Mixer:
         self.want_rate = DEFAULT_RATE
         self.gain = 1.0
         self.stream = None
-        self.last_play = 0.0
+        self.prewarm = False
         self.last_fail = -RETRY_S
         self.stopping = False
         self.thread = threading.Thread(target=self.run, name="mixer", daemon=True)
@@ -265,17 +264,20 @@ class Mixer:
         self.thread.start()
 
     def load(self, directory, takes, volume):
-        """Decode outside the lock, then swap the whole bank in one go. A rate
-        change is applied by the mixer thread."""
+        """Decode outside the lock, then swap the bank and warm its stream."""
         rate = elect_rate(directory, takes)
         bank, failed = decode_pack(directory, takes, rate)
         with self.cond:
-            if rate != self.want_rate:
+            rate_changed = rate != self.want_rate
+            if rate_changed:
                 self.want_rate = rate
                 self.voices.clear()
             self.bank = bank
             self.set_volume(volume)
-            self.cond.notify()
+            self.prewarm = bool(bank) and (rate_changed or self.stream is None)
+            self.cond.notify_all()
+            while self.prewarm and (self.stream is None or self.rate != rate) and not self.stopping:
+                self.cond.wait()
         return len(bank), failed
 
     def set_volume(self, value):
@@ -302,7 +304,6 @@ class Mixer:
             if len(self.voices) >= MAX_VOICES:
                 self.voices.popleft()
             self.voices.append(Voice(samples, now if TRACE else None))
-            self.last_play = now
             self.cond.notify()
         return True
 
@@ -344,8 +345,20 @@ class Mixer:
     def _fail(self, error):
         self._close_stream()
         self.voices.clear()
+        self.prewarm = False
         self.last_fail = time.monotonic()
         self.emit({"evt": "error", "msg": str(error)})
+        self.cond.notify_all()
+
+    def _open_stream(self):
+        try:
+            self.stream = Stream(self.lib, self.rate)
+        except PulseError as e:
+            self._fail(e)
+            return False
+        self.prewarm = False
+        self.cond.notify_all()
+        return True
 
     def _apply_rate(self):
         if self.want_rate != self.rate:
@@ -362,19 +375,17 @@ class Mixer:
                     if now >= next_tick:
                         self.emit({"evt": "tick"})
                         next_tick = now + TICK_S
-                    if self.stream is not None and now - self.last_play >= IDLE_FREE_S:
-                        self._close_stream()
                     self._apply_rate()
+                    if self.stream is None and self.prewarm:
+                        self._open_stream()
+                        continue
                     self.cond.wait(next_tick - now)
                 if self.stopping and not self.voices:
                     self._close_stream()
                     return
                 self._apply_rate()
                 if self.stream is None:
-                    try:
-                        self.stream = Stream(self.lib, self.rate)
-                    except PulseError as e:
-                        self._fail(e)
+                    if not self._open_stream():
                         continue
                 started = [v for v in self.voices if v.started is not None]
                 chunk = self.mix()

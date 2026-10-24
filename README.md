@@ -142,9 +142,9 @@ line on Hyprland's socket2. Quickshell is already listening to socket2, so the
 key arrives inside the shell, gets translated from evdev code to a thock key
 name, and one of the pack's takes for that key is written as a JSON line to
 `player.py`. The player decoded the whole pack into memory when it loaded, so
-the keystroke path does no file I/O, spawns no process and makes no round trip;
-the click starts 15 to 25 ms after the key. Packs with key-up recordings click
-on release too.
+the keystroke path does no file I/O or process spawning, and does not set up the
+audio stream. The stream opens with the pack and stays open while the plugin is
+enabled. Packs with key-up recordings click on release too.
 
 The player is a Python script from the standard library only. It mixes up to
 sixteen overlapping key sounds into one stereo stream through

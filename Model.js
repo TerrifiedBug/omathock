@@ -136,6 +136,18 @@ function dueReleases(state, now) {
   return out
 }
 
+// Milliseconds until the next pending release can sound, or -1 when none wait.
+function nextReleaseDelay(state, now) {
+  var codes = Object.keys(state.pending)
+  if (codes.length === 0) return -1
+  var delay = Infinity
+  for (var i = 0; i < codes.length; i++) {
+    var entry = state.pending[codes[i]]
+    delay = Math.min(delay, UP_DEBOUNCE_MS - (now - entry.at))
+  }
+  return Math.max(0, delay)
+}
+
 function hasPending(state) {
   return Object.keys(state.pending).length > 0
 }
@@ -441,6 +453,7 @@ if (typeof module !== "undefined") {
     pressKey: pressKey,
     releaseKey: releaseKey,
     dueReleases: dueReleases,
+    nextReleaseDelay: nextReleaseDelay,
     hasPending: hasPending,
     takesFor: takesFor,
     takeKey: takeKey,
