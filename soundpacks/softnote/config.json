@@ -2,7 +2,7 @@
   "metadata": {
     "name": "Softnote",
     "brand": "Original",
-    "author": "OmaThock contributors",
+    "author": "Ganesh Gunasegaran",
     "supportsKeyUp": false,
     "category": "keyboard"
   },
@@ -16,7 +16,10 @@
         "2.wav",
         "3.wav",
         "4.wav",
-        "5.wav"
+        "5.wav",
+        "6.wav",
+        "7.wav",
+        "8.wav"
       ],
       "up": []
     }

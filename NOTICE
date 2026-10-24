@@ -75,7 +75,7 @@ licensed MIT:
   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
   IN THE SOFTWARE.
 
-
-Softnote in soundpacks/softnote is an original synthesized soundpack. Its
-configuration, generator, audio and documentation are licensed under the MIT
-License included in that directory; no third-party sound recordings are used.
+Softnote in soundpacks/softnote is an original synthesized soundpack by
+Ganesh Gunasegaran. Its configuration, generator, audio and documentation
+are licensed under the MIT License in that directory; it contains no
+third-party recordings.
