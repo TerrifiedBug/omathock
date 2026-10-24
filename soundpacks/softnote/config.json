@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "name": "Softnote",
+    "brand": "Original",
+    "author": "OmaThock contributors",
+    "supportsKeyUp": false,
+    "category": "keyboard"
+  },
+  "license": {
+    "type": "MIT"
+  },
+  "sounds": {
+    "default": {
+      "down": [
+        "1.wav",
+        "2.wav",
+        "3.wav",
+        "4.wav",
+        "5.wav"
+      ],
+      "up": []
+    }
+  },
+  "id": "0b38c794-22e0-4ad8-8b74-93d07c95d9ce"
+}

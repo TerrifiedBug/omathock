@@ -1,6 +1,6 @@
 # OmaThock
 
-Every key you press makes a mechanical keyboard sound. Seventeen switch
+Every key you press can play a keyboard sound. Seventeen switch
 recordings are bundled, including Holy Panda, Alpaca, Cherry MX Blue and Brown,
 Ink Black, Box Navy and buckling spring, and the bar button gives you a toggle,
 the soundpack picker and a volume slider.
@@ -94,6 +94,8 @@ and packaged the same way:
 `cherry-mx-black` · `cherry-mx-blue` · `cherry-mx-brown` ·
 `cherry-mx-brown-pbt` · `cherry-mx-red` · `everglide-crystal-purple` ·
 `everglide-oreo`
+
+The original `softnote` pack uses one short, synthesized key-down cue for laptop typing. It contains no switch recordings. See [its design notes](soundpacks/softnote/README.md).
 
 Add your own from thock's collection, from
 [mechvibes.com](https://mechvibes.com), or from a MechvibesDX pack. Any of
@@ -235,5 +237,6 @@ without changing the plugin's Omarchy requirements.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The bundled soundpacks are MIT-licensed recordings
-by Thomas Lai and by mechvibes; see [NOTICE](NOTICE).
+MIT, see [LICENSE](LICENSE). The recorded packs contain keyboard samples by
+Thomas Lai and mechvibes; Softnote is an original synthesized pack. See
+[NOTICE](NOTICE) and the license in each pack directory.
