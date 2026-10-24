@@ -111,9 +111,10 @@ curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/ke
   | bsdtar -xf - -C ~/.local/share/omathock/soundpacks/cherry-mx-red-pbt
 ```
 
-Reopen the panel and it is in the list. The directory name is the pack's name,
-so `cherry-mx-red-pbt` shows up as "Cherry Mx Red Pbt", and a user pack with the same
-name as a bundled one replaces it.
+Reopen the panel and it is in the list. Labels use "Cherry MX" for both
+`cherry-mx` and `cherrymx` folder names, with ABS and PBT capitalised.
+The folder name stays unchanged; a user pack with the same folder name as
+a bundled one replaces it.
 
 Mechvibes packs play as they are: `multi` packs with one file per key,
 `single` packs that cut every key out of one sprite file, `{0-4}` variant

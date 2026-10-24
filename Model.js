@@ -378,11 +378,12 @@ function normalizePack(configText) {
   return { sounds: {}, format: "" }
 }
 
-// Directory name is the pack's identity, so it is also its label:
-// "gateron-ink-black" -> "Gateron Ink Black", "IBM-buckling-spring" -> "IBM
-// Buckling Spring" (only the first character is touched, acronyms survive).
+// Keep directory slugs as identities, but use one spelling for Cherry MX
+// across the legacy "cherry-mx" and MechvibesDX "cherrymx" pack names.
 function packLabel(slug) {
-  return String(slug).split(/[-_]/).filter(function(word) { return word !== "" }).map(function(word) {
+  var name = String(slug).replace(/^cherry[-_]?mx(?=[-_]|$)/i, "Cherry-MX")
+  return name.split(/[-_]/).filter(function(word) { return word !== "" }).map(function(word) {
+    if (name.indexOf("Cherry-MX") === 0 && /^(abs|pbt)$/i.test(word)) return word.toUpperCase()
     return word.charAt(0).toUpperCase() + word.slice(1)
   }).join(" ")
 }
