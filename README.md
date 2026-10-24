@@ -95,8 +95,9 @@ and packaged the same way:
 `cherry-mx-brown-pbt` · `cherry-mx-red` · `everglide-crystal-purple` ·
 `everglide-oreo`
 
-Also bundled is `softnote`, a synthesized pack by Ganesh Gunasegaran: one
-short tonal cue for every key, made for laptop typing. See
+Also bundled is `softnote`, a synthesized pack by Ganesh Gunasegaran for
+laptop typing: one short note for every key, struck heavier for Space and
+Enter and muted for Backspace. See
 [its design notes](soundpacks/softnote/README.md).
 
 Add your own from thock's collection, from

@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parent
 RATE = 44_100
 PEAK_TARGET = 8_000  # Peak of the reference strike (velocity 0 dB).
 FUNDAMENTAL = 880.0  # A5; all other oscillators are integer harmonics.
-DURATION_MS = 30
 
 # Partial number, relative amplitude, decay time constant (s), phase (rad).
 PARTIALS = (
@@ -24,19 +23,40 @@ PARTIALS = (
     (4, 0.08, 0.0017, 0.20),
 )
 
-# One note struck eight ways. Velocity (dB) moves the level and, as on a struck
-# object, the brightness with it: a harder strike lifts the upper partials and
-# the noise onset more than the fundamental. Decay varies a little on its own.
-# The pitch never moves, so no take can be heard as a different note.
+# How each key is built: duration (ms), decay scale, tilt (dB per partial above
+# the fundamental), noise onset (dB) and level (dB). Space and Enter are bigger
+# keys, so they ring longer, Space the darker of the two; Backspace is damped:
+# short, dark and quieter. Every key keeps the same note, so the keys differ in
+# weight, never in pitch.
+VOICES = {
+    "default": (30, 1.00, 0.0, 0.0, 0.0),
+    "space": (40, 1.35, -4.0, -4.0, -0.5),
+    "enter": (45, 1.55, 0.0, -2.0, -1.5),
+    "backspace": (24, 0.65, -6.0, -8.0, 0.0),
+}
+
+# Each key struck several ways. Velocity (dB) moves the level and, as on a
+# struck object, the brightness with it: a harder strike lifts the upper
+# partials and the noise onset more than the fundamental. Decay varies a little
+# on its own. File names follow the bundled packs: 2xx Space, 3xx Enter, 4xx
+# Backspace.
 SAMPLES = (
-    ("1.wav", -1.5, 0.94, 101),
-    ("2.wav", 0.6, 1.06, 202),
-    ("3.wav", -0.4, 1.00, 303),
-    ("4.wav", 1.5, 0.96, 404),
-    ("5.wav", -1.0, 1.04, 505),
-    ("6.wav", 1.0, 0.98, 606),
-    ("7.wav", 0.0, 1.08, 707),
-    ("8.wav", -0.7, 0.92, 808),
+    ("1.wav", "default", -1.5, 0.94, 101),
+    ("2.wav", "default", 0.6, 1.06, 202),
+    ("3.wav", "default", -0.4, 1.00, 303),
+    ("4.wav", "default", 1.5, 0.96, 404),
+    ("5.wav", "default", -1.0, 1.04, 505),
+    ("6.wav", "default", 1.0, 0.98, 606),
+    ("7.wav", "default", 0.0, 1.08, 707),
+    ("8.wav", "default", -0.7, 0.92, 808),
+    ("201.wav", "space", -0.8, 0.97, 2101),
+    ("202.wav", "space", 0.0, 1.03, 2202),
+    ("203.wav", "space", 0.8, 1.00, 2303),
+    ("301.wav", "enter", -0.4, 1.02, 3101),
+    ("302.wav", "enter", 0.4, 0.98, 3202),
+    ("401.wav", "backspace", -0.8, 1.03, 4101),
+    ("402.wav", "backspace", 0.0, 0.97, 4202),
+    ("403.wav", "backspace", 0.8, 1.00, 4303),
 )
 
 
@@ -61,18 +81,20 @@ def filtered_attack(seed: int, frames: int, lp_beta: float) -> list[float]:
     return bandlimited
 
 
-def strike(velocity_db: float, decay: float, seed: int) -> list[float]:
-    """One unscaled strike; velocity 0 dB with decay 1.0 is the reference."""
-    frames = round(RATE * DURATION_MS / 1000)
-    level = 10 ** (velocity_db / 20)
+def strike(key: str, velocity_db: float, decay: float, seed: int) -> list[float]:
+    """One unscaled strike; the default key at velocity 0 dB and decay 1.0 is the reference."""
+    duration_ms, key_decay, tilt_db, noise_db, level_db = VOICES[key]
+    frames = round(RATE * duration_ms / 1000)
+    level = 10 ** ((velocity_db + level_db) / 20)
+    decay *= key_decay
     # Each partial above the fundamental gains another half of the velocity.
     weights = [
-        amplitude * 10 ** ((number - 1) * 0.5 * velocity_db / 20)
+        amplitude * 10 ** ((number - 1) * (0.5 * velocity_db + tilt_db) / 20)
         for number, amplitude, _, _ in PARTIALS
     ]
     # Harder strikes give a louder and slightly brighter noise onset.
     attack = filtered_attack(seed, frames, lp_beta=0.60 - 0.05 * velocity_db)
-    noise_gain = 0.18 * 10 ** (1.5 * velocity_db / 20)
+    noise_gain = 0.18 * 10 ** ((1.5 * velocity_db + noise_db) / 20)
     fade_start = frames - round(RATE * 0.002)
     values: list[float] = []
 
@@ -94,9 +116,9 @@ def strike(velocity_db: float, decay: float, seed: int) -> list[float]:
     return values
 
 
-def render(gain: float, sample: tuple[str, float, float, int]) -> dict[str, float | int | str]:
-    filename, velocity_db, decay, seed = sample
-    pcm = [max(-32767, min(32767, round(value * gain))) for value in strike(velocity_db, decay, seed)]
+def render(gain: float, sample: tuple[str, str, float, float, int]) -> dict[str, float | int | str]:
+    filename, key, velocity_db, decay, seed = sample
+    pcm = [max(-32767, min(32767, round(value * gain))) for value in strike(key, velocity_db, decay, seed)]
     with wave.open(str(ROOT / filename), "wb") as output:
         output.setnchannels(1)
         output.setsampwidth(2)
@@ -107,6 +129,7 @@ def render(gain: float, sample: tuple[str, float, float, int]) -> dict[str, floa
     rms = math.sqrt(sum(value * value for value in pcm) / len(pcm))
     return {
         "file": filename,
+        "key": key,
         "velocity_db": velocity_db,
         "peak": peak,
         "rms": round(rms),
@@ -124,7 +147,10 @@ def write_config() -> None:
             "category": "keyboard",
         },
         "license": {"type": "MIT"},
-        "sounds": {"default": {"down": [name for name, *_ in SAMPLES], "up": []}},
+        "sounds": {
+            key: {"down": [name for name, owner, *_ in SAMPLES if owner == key], "up": []}
+            for key in VOICES
+        },
         "id": "0b38c794-22e0-4ad8-8b74-93d07c95d9ce",
     }
     (ROOT / "config.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -132,7 +158,7 @@ def write_config() -> None:
 
 def main() -> None:
     write_config()
-    reference = strike(0.0, 1.0, 0)
+    reference = strike("default", 0.0, 1.0, 0)
     gain = PEAK_TARGET / max(abs(value) for value in reference)
     for sample in SAMPLES:
         print(json.dumps(render(gain, sample)))
