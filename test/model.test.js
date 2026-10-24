@@ -225,6 +225,51 @@ test("packLabel title-cases a slug without mangling acronyms", () => {
   assert.equal(Model.packLabel("IBM-buckling-spring"), "IBM Buckling Spring")
 })
 
+test("packGroups keeps every installed slug exactly once with alphabetic brand and leaf rows", () => {
+  const slugs = [
+    "softnote", "topre", "novelkeys-cream", "kailh-box-navy",
+    "gateron-turquoise-tealios", "gateron-ink-red", "gateron-ink-black",
+    "everglide-oreo", "everglide-crystal-purple", "durock-alpaca", "drop-holy-panda",
+    "cherry-mx-red", "cherry-mx-brown", "cherry-mx-brown-pbt", "cherry-mx-blue",
+    "cherry-mx-black", "alps-skcm-blue", "IBM-buckling-spring",
+    "topre-purple-hybrid-pbt", "cherrymx-blue-pbt", "cherrymx-black-pbt",
+    "klack-tactile", "klack-mechanical", "klack-cyberpunk", "klack-clicky", "klack-builtin"
+  ]
+  const rows = Model.packGroups(slugs)
+  const flattened = rows.flatMap(row => row.packs || [row]).map(row => row.slug)
+  assert.equal(flattened.length, 26)
+  assert.deepEqual(flattened.slice().sort(), slugs.slice().sort())
+  assert.deepEqual(rows.map(row => row.label), rows.map(row => row.label).sort((a, b) => a.localeCompare(b)))
+  assert.deepEqual(rows.filter(row => row.packs).map(row => row.brand),
+    ["Cherry MX", "Everglide", "Gateron", "Klack", "Topre"])
+  for (const row of rows.filter(row => row.packs)) {
+    assert.ok(row.packs.length > 1)
+    assert.deepEqual(row.packs.map(pack => pack.label),
+      row.packs.map(pack => pack.label).sort((a, b) => a.localeCompare(b)))
+    assert.ok(row.packs.every(pack => !pack.label.startsWith(row.brand + " ")))
+  }
+  const cherry = rows.find(row => row.brand === "Cherry MX")
+  assert.equal(cherry.packs.find(pack => pack.slug === "cherrymx-black-pbt").label, "Black PBT")
+  assert.equal(rows.find(row => row.brand === "Topre").packs.find(pack => pack.slug === "topre").label, "Original")
+})
+
+test("packGroups flattens singleton brands without changing saved slugs", () => {
+  const slugs = ["cherrymx-black-pbt", "topre", "gateron-ink-red", "custom_pack"]
+  const rows = Model.packGroups(slugs)
+  assert.ok(rows.every(row => !row.packs))
+  assert.deepEqual(rows.map(row => row.slug).sort(), slugs.slice().sort())
+  assert.equal(rows.find(row => row.slug === "cherrymx-black-pbt").label, "Cherry MX Black PBT")
+  assert.deepEqual(Model.packGroups([]), [])
+})
+
+test("packGroups only recognizes exact brand boundaries and ignores duplicate identities", () => {
+  const rows = Model.packGroups(["gateronish", "my-gateron-red", "gateron-ink-red", "gateron_ink_black", "gateron-ink-red"])
+  assert.equal(rows.length, 3)
+  const group = rows.find(row => row.brand === "Gateron")
+  assert.deepEqual(group.packs.map(pack => pack.slug), ["gateron_ink_black", "gateron-ink-red"])
+  assert.deepEqual(rows.filter(row => !row.packs).map(row => row.slug), ["gateronish", "my-gateron-red"])
+})
+
 test("parsePacks sorts by slug and lets the user root win", () => {
   const out = Model.parsePacks([
     "/usr/share/omathock/soundpacks/topre/config.json",

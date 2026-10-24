@@ -48,12 +48,21 @@ widget. Omarchy scopes direct service access to the hosting plugin in that
 case, so OmaThock falls back to its public IPC target and mirrors the service
 state asynchronously.
 
-| Control    | Does                                                      |
-| ---------- | --------------------------------------------------------- |
-| Toggle     | Turns the key hook on and off; off removes it from Hyprland |
-| Soundpack  | Every pack found on disk; picking one plays a sample click |
-| Volume     | 0–100; releasing the slider plays a sample click          |
-| `Esc`      | Closes the panel                                          |
+| Control | Does |
+| ------- | ---- |
+| Toggle | Turns the key hook on and off; off removes it from Hyprland |
+| Soundpacks | Groups brands with multiple packs; selecting a pack keeps the list open and plays an audition |
+| All soundpacks | Returns from a brand to the previous position in the main list |
+| Preview | Replays the current pack without changing the selection |
+| Volume | 0–100; releasing the slider auditions the new level |
+| `↑` / `↓`, `Enter` | Moves through the controls and selects the current row |
+| `←` / `Esc` | Returns from a brand; `Esc` from the main list closes the panel |
+
+Each audition plays three letters, Space and Enter over about 0.7 seconds,
+including releases when the pack records them. It waits for the selected pack
+to load. Another selection or volume audition replaces the previous one.
+Closing the panel stops the audition without cutting off normal typing sounds.
+Muting or locking also cancels it.
 
 The panel is also a summonable surface:
 
@@ -111,9 +120,11 @@ curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/ke
   | bsdtar -xf - -C ~/.local/share/omathock/soundpacks/cherry-mx-red-pbt
 ```
 
-Reopen the panel and it is in the list. The directory name is the pack's name,
-so `cherry-mx-red-pbt` shows up as "Cherry Mx Red Pbt", and a user pack with the same
-name as a bundled one replaces it.
+Reopen the panel and it is in the list. Labels use "Cherry MX" for both
+`cherry-mx` and `cherrymx` folder names, with ABS and PBT capitalised.
+The picker sorts packs alphabetically by their displayed labels.
+The folder name stays unchanged; a user pack with the same folder name as
+a bundled one replaces it.
 
 Mechvibes packs play as they are: `multi` packs with one file per key,
 `single` packs that cut every key out of one sprite file, `{0-4}` variant
@@ -129,6 +140,9 @@ omarchy-shell omathock toggle
 omarchy-shell omathock soundpack kailh-box-navy  # "unknown" if no such pack
 omarchy-shell omathock volume 30
 omarchy-shell omathock refresh                   # rescan the soundpack directories
+omarchy-shell omathock preview                   # replay the current pack
+omarchy-shell omathock previewVolume 30          # set volume and audition it
+omarchy-shell omathock cancelPreview             # stop the audition only
 ```
 
 ## How it works
@@ -159,6 +173,10 @@ exits with it. The shell watches a two-second heartbeat from the player and
 restarts it if it dies or stops answering; after five failures in thirty
 seconds the panel says "Sound player failed" with the reason, and reopening the
 panel or `omarchy-shell omathock refresh` tries again.
+
+When a pack needs a replacement audio stream, loading waits for its open
+attempt to finish. A failed write from the previous stream leaves that
+warmup request intact, so the new stream still gets its open attempt.
 
 Holding a key gives one sound. That takes some care, because a held key looks
 different on every setup: nothing at all until release on a plain keyboard, a

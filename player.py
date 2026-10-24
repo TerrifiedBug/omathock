@@ -227,12 +227,13 @@ def decode_pack(directory, takes, rate):
 
 
 class Voice:
-    __slots__ = ("samples", "pos", "started")
+    __slots__ = ("samples", "pos", "started", "preview")
 
-    def __init__(self, samples, started):
+    def __init__(self, samples, started, preview):
         self.samples = samples
         self.pos = 0
         self.started = started
+        self.preview = preview
 
 
 class Mixer:
@@ -289,7 +290,7 @@ class Mixer:
             return
         self.gain = max(0.0, min(100.0, value)) / 100.0
 
-    def play(self, take):
+    def play(self, take, preview=False):
         """True when the take is known and queued."""
         try:
             samples = self.bank.get(take_key(take))
@@ -303,9 +304,14 @@ class Mixer:
                 return True
             if len(self.voices) >= MAX_VOICES:
                 self.voices.popleft()
-            self.voices.append(Voice(samples, now if TRACE else None))
+            self.voices.append(Voice(samples, now if TRACE else None, preview))
             self.cond.notify()
         return True
+
+    def cancel_preview(self):
+        """Remove audition voices without cutting off physical keystrokes."""
+        with self.cond:
+            self.voices = collections.deque(voice for voice in self.voices if not voice.preview)
 
     def stop(self):
         with self.cond:
@@ -345,7 +351,6 @@ class Mixer:
     def _fail(self, error):
         self._close_stream()
         self.voices.clear()
-        self.prewarm = False
         self.last_fail = time.monotonic()
         self.emit({"evt": "error", "msg": str(error)})
         self.cond.notify_all()
@@ -354,6 +359,8 @@ class Mixer:
         try:
             self.stream = Stream(self.lib, self.rate)
         except PulseError as e:
+            # Only the warmup attempt itself may cancel a pending load.
+            self.prewarm = False
             self._fail(e)
             return False
         self.prewarm = False
@@ -421,10 +428,15 @@ def serve(lines, mixer, emit):
             continue
         if cmd == "load" and isinstance(msg.get("takes"), list) and isinstance(msg.get("dir"), str):
             count, failed = mixer.load(msg["dir"], [t for t in msg["takes"] if isinstance(t, dict)], msg.get("volume", 100))
-            emit({"evt": "loaded", "dir": msg["dir"], "takes": count, "failed": failed})
+            event = {"evt": "loaded", "dir": msg["dir"], "takes": count, "failed": failed}
+            if "request" in msg:
+                event["request"] = msg["request"]
+            emit(event)
         elif cmd == "play" and isinstance(msg.get("take"), dict):
-            if not mixer.play(msg["take"]):
+            if not mixer.play(msg["take"], preview=msg.get("preview") is True):
                 emit({"evt": "error", "msg": "unknown take %s" % take_key(msg["take"])})
+        elif cmd == "cancelPreview":
+            mixer.cancel_preview()
         elif cmd == "volume":
             mixer.set_volume(msg.get("value"))
         else:
