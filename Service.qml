@@ -73,7 +73,6 @@ Item {
   // Which keys are held and which releases are still waiting to count; the
   // rules live in Model.pressKey / releaseKey / dueReleases.
   property var keys: Model.keyState()
-  property bool releasePending: false
 
   // Armed by setSoundpack; the click fires once the player reports the
   // picked pack loaded.
@@ -119,6 +118,16 @@ Item {
     var takes = Model.takesFor(sounds, name, up)
     if (takes.length === 0) return
     send({ cmd: "play", take: takes[Math.floor(Math.random() * takes.length)] })
+  }
+
+  function armReleaseFlush() {
+    var delay = Model.nextReleaseDelay(keys, Date.now())
+    if (delay < 0) {
+      releaseFlush.stop()
+      return
+    }
+    releaseFlush.interval = Math.max(1, delay)
+    releaseFlush.restart()
   }
 
   function onPlayerLine(line) {
@@ -197,7 +206,7 @@ Item {
   // is dropped rather than left holding that key down forever.
   onHookWantedChanged: {
     keys = Model.keyState()
-    releasePending = false
+    releaseFlush.stop()
     syncHook()
   }
 
@@ -357,25 +366,23 @@ Item {
       var key = Model.parseEvent(event.data)
       if (!key) return
       if (key.up) {
-        if (Model.releaseKey(root.keys, key.code, key.name, Date.now())) root.releasePending = true
+        if (Model.releaseKey(root.keys, key.code, key.name, Date.now())) root.armReleaseFlush()
       } else if (Model.pressKey(root.keys, key.code)) {
         root.play(key.name, false)
       }
     }
   }
 
-  // Runs only while a release is waiting out the repeat window, and stops as
-  // soon as the last one has played.
+  // One shot at the next release deadline; repeated 15 ms polling delayed key-up sounds.
   Timer {
     id: releaseFlush
-    interval: 15
-    repeat: true
-    running: root.releasePending
+    interval: 35
+    repeat: false
 
     onTriggered: {
       var due = Model.dueReleases(root.keys, Date.now())
       for (var i = 0; i < due.length; i++) root.play(due[i], true)
-      root.releasePending = Model.hasPending(root.keys)
+      root.armReleaseFlush()
     }
   }
 

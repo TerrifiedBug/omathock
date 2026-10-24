@@ -48,9 +48,24 @@ test("a plain press and release click once each", () => {
   const state = Model.keyState()
   assert.equal(Model.pressKey(state, 38), true)
   assert.equal(Model.releaseKey(state, 38, "a", 1000), true)
+  assert.equal(Model.nextReleaseDelay(state, 1000), 35)
   assert.deepEqual(Model.dueReleases(state, 1000 + 34), [])
+  assert.equal(Model.nextReleaseDelay(state, 1034), 1)
   assert.deepEqual(Model.dueReleases(state, 1000 + 35), ["a"])
+  assert.equal(Model.nextReleaseDelay(state, 1035), -1)
   assert.equal(Model.hasPending(state), false)
+})
+
+test("nextReleaseDelay tracks the earliest of several pending releases", () => {
+  const state = Model.keyState()
+  Model.pressKey(state, 38)
+  Model.releaseKey(state, 38, "a", 1000)
+  Model.pressKey(state, 39)
+  Model.releaseKey(state, 39, "s", 1010)
+  assert.equal(Model.nextReleaseDelay(state, 1020), 15)
+  assert.deepEqual(Model.dueReleases(state, 1035), ["a"])
+  assert.equal(Model.nextReleaseDelay(state, 1035), 10)
+  assert.deepEqual(Model.dueReleases(state, 1045), ["s"])
 })
 
 test("the echo an input method adds is silent", () => {
