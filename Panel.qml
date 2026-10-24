@@ -34,6 +34,8 @@ Panel {
     : (ipcState.packs || [])
   readonly property var packOptions: packSlugs.map(function(slug) {
     return { value: slug, label: Model.packLabel(slug) }
+  }).sort(function(a, b) {
+    return a.label.localeCompare(b.label)
   })
 
   readonly property string playerState: service ? service.playerState : String(ipcState.player || "")

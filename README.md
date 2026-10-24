@@ -113,6 +113,7 @@ curl -L https://github.com/kamillobinski/thock-soundpacks/raw/refs/heads/main/ke
 
 Reopen the panel and it is in the list. Labels use "Cherry MX" for both
 `cherry-mx` and `cherrymx` folder names, with ABS and PBT capitalised.
+The picker sorts packs alphabetically by their displayed labels.
 The folder name stays unchanged; a user pack with the same folder name as
 a bundled one replaces it.
 
