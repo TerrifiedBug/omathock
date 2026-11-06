@@ -295,6 +295,19 @@ test("findEntry looks through the bar layout and the plugins list", () => {
   assert.deepEqual(Model.findEntry(config, "absent"), {})
 })
 
+test("findEntry reads persisted settings from the tray", () => {
+  const entry = { id: "me", enabled: false, soundpack: "softnote", volume: 42 }
+  const config = JSON.stringify({ bar: { layout: { tray: [entry] } } })
+  assert.deepEqual(Model.findEntry(config, "me"), entry)
+})
+
+test("findEntry reads settings from the bar sections beside the clock", () => {
+  for (const section of ["centerBegin", "centerEnd"]) {
+    const config = JSON.stringify({ bar: { layout: { [section]: [{ id: "me", volume: 30 }] } } })
+    assert.equal(Model.findEntry(config, "me").volume, 30, section)
+  }
+})
+
 test("setting falls back to the manifest defaults", () => {
   assert.equal(Model.setting({ volume: 0 }, "volume"), 0)
   assert.equal(Model.setting({ volume: null }, "volume"), 100)

@@ -453,7 +453,7 @@ function findEntry(configText, id) {
   if (!config) return {}
   var lists = []
   var layout = config.bar && config.bar.layout
-  if (layout) lists.push(layout.left, layout.center, layout.right)
+  if (layout) lists.push(layout.left, layout.centerBegin, layout.center, layout.centerEnd, layout.right, layout.tray)
   lists.push(config.plugins)
   for (var l = 0; l < lists.length; l++) {
     var list = lists[l]
